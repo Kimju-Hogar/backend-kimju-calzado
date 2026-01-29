@@ -195,7 +195,7 @@ const sendTrackingEmail = async (order, trackingNumber) => {
             Número de Guía:<br/>
             <div style="font-size: 20px; font-weight: 900; color: #EC4899; background: rgba(236, 72, 153, 0.1); padding: 10px; border-radius: 10px; display: inline-block; margin: 10px 0; border: 1px dashed #EC4899; letter-spacing: 2px;">${trackingNumber}</div><br/><br/>
             Ingresa este número en la página de la transportadora para ver el estado.`,
-            'https://kimjuhogar.com/profile',
+            'https://calzado.kimjuhogar.com/profile',
             'RASTREAR PEDIDO'
         );
 
