@@ -8,7 +8,7 @@ const transporter = nodemailer.createTransport({
     }
 });
 
-// --- Kawaii Template Generator ---
+// --- Cyber-Luxe Template Generator ---
 const getTemplate = (title, content, actionLink = null, actionText = null) => {
     return `
     <!DOCTYPE html>
@@ -17,30 +17,30 @@ const getTemplate = (title, content, actionLink = null, actionText = null) => {
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
-            body { margin: 0; padding: 0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #fdf2f8; }
-            .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 30px; overflow: hidden; box-shadow: 0 20px 40px rgba(236, 72, 153, 0.15); border: 4px solid #fce7f3; }
-            .header { background: linear-gradient(135deg, #fbcfe8 0%, #f9a8d4 100%); padding: 50px 20px; text-align: center; position: relative; overflow: hidden; }
-            .header::before { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: radial-gradient(circle, rgba(255,255,255,0.2) 20%, transparent 20%); background-size: 20px 20px; opacity: 0.5; }
-            .logo { font-size: 36px; font-weight: 900; color: #fff; letter-spacing: -1px; text-transform: uppercase;position: relative; text-shadow: 2px 2px 0px rgba(219, 39, 119, 0.3); }
-            .logo span { color: #fdf2f8; font-weight: 300; }
-            .content { padding: 50px 40px; text-align: center; color: #4b5563; background-image: radial-gradient(#fce7f3 1px, transparent 1px); background-size: 30px 30px; }
-            .title { font-size: 28px; font-weight: 800; color: #db2777; margin-bottom: 20px; line-height: 1.2; }
-            .text { font-size: 16px; line-height: 1.8; margin-bottom: 30px; color: #6b7280; font-weight: 500; }
-            .items-box { background: #fff; border-radius: 20px; padding: 25px; text-align: left; margin-bottom: 30px; border: 2px dashed #fbcfe8; box-shadow: 5px 5px 0px #fce7f3; }
-            .item-row { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 15px; color: #db2777; font-weight: 700; border-bottom: 1px solid #fce7f3; padding-bottom: 8px; }
+            body { margin: 0; padding: 0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #0B1121; color: #ffffff; }
+            .container { max-width: 600px; margin: 40px auto; background: #151e32; border-radius: 20px; overflow: hidden; box-shadow: 0 0 50px rgba(236, 72, 153, 0.1); border: 1px solid rgba(255,255,255,0.1); }
+            .header { background: #050505; padding: 40px 20px; text-align: center; border-bottom: 2px solid #EC4899; }
+            .logo { font-size: 28px; font-weight: 900; color: #ffffff; letter-spacing: 2px; text-transform: uppercase; }
+            .logo span { color: #EC4899; }
+            .content { padding: 40px; text-align: center; color: #cbd5e1; }
+            .title { font-size: 24px; font-weight: 800; color: #EC4899; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 1px; }
+            .text { font-size: 15px; line-height: 1.6; margin-bottom: 30px; color: #94a3b8; }
+            .items-box { background: rgba(0,0,0,0.2); border-radius: 15px; padding: 20px; text-align: left; margin-bottom: 30px; border: 1px solid rgba(255,255,255,0.05); }
+            .item-row { display: flex; justify-content: space-between; margin-bottom: 15px; font-size: 14px; color: #fff; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px; }
             .item-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
-            .total { font-size: 22px; font-weight: 900; color: #be185d; text-align: right; margin-top: 20px; }
-            .btn { display: inline-block; background: #db2777; color: #ffffff; text-decoration: none; padding: 18px 40px; border-radius: 50px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-top: 25px; box-shadow: 0 10px 20px rgba(219, 39, 119, 0.25); transition: transform 0.2s; }
-            .btn:hover { transform: translateY(-3px); box-shadow: 0 15px 30px rgba(219, 39, 119, 0.35); }
-            .footer { background: #fdf4f9; padding: 40px; text-align: center; font-size: 13px; color: #9ca3af; font-weight: 600; border-top: 1px solid #fce7f3; }
-            .footer-links { margin-bottom: 20px; }
-            .footer-links a { color: #db2777; text-decoration: none; margin: 0 10px; }
+            .total { font-size: 20px; font-weight: 900; color: #EC4899; text-align: right; margin-top: 20px; text-transform: uppercase; letter-spacing: 1px; }
+            .btn { display: inline-block; background: #EC4899; color: #ffffff; text-decoration: none; padding: 16px 32px; border-radius: 50px; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; margin-top: 20px; font-size: 12px; box-shadow: 0 0 20px rgba(236, 72, 153, 0.4); }
+            .btn:hover { background: #db2777; box-shadow: 0 0 30px rgba(236, 72, 153, 0.6); }
+            .footer { background: #0f172a; padding: 40px; text-align: center; font-size: 11px; color: #64748b; font-weight: 600; border-top: 1px solid rgba(255,255,255,0.05); text-transform: uppercase; letter-spacing: 1px; }
+            .footer-links a { color: #EC4899; text-decoration: none; margin: 0 10px; }
+            .data-box { background: rgba(236, 72, 153, 0.05); padding: 20px; border-radius: 10px; border: 1px solid rgba(236, 72, 153, 0.1); margin-bottom: 20px; text-align: left; font-size: 13px; color: #cbd5e1; }
+            .data-box strong { color: #EC4899; }
         </style>
     </head>
     <body>
         <div class="container">
             <div class="header">
-                <div class="logo">Kimju<span>Hogar</span> 🌸</div>
+                <div class="logo">KIMJU<span>CALZADO</span></div>
             </div>
             <div class="content">
                 <div class="title">${title}</div>
@@ -53,7 +53,7 @@ const getTemplate = (title, content, actionLink = null, actionText = null) => {
                     <a href="https://kimjuhogar.com/profile">Mi Cuenta</a> •
                     <a href="https://kimjuhogar.com/contact">Ayuda</a>
                 </div>
-                <p>Hecho con 💖 para tu hogar.</p>
+                <p>Estilo y elegancia para tu hogar.</p>
                 <p>&copy; ${new Date().getFullYear()} Kimju Hogar. Valledupar, Colombia.</p>
             </div>
         </div>
@@ -73,18 +73,18 @@ const sendOrderEmail = async (order, user) => {
         const itemsHtml = `
             <div class="items-box">
                 ${order.orderItems.map(item => `
-                    <div class="item-row" style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #fce7f3; padding-bottom: 10px; margin-bottom: 10px;">
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                             ${item.image ? `<img src="${item.image}" alt="${item.name}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 8px; border: 1px solid #fce7f3;">` : ''}
+                    <div class="item-row" style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px; margin-bottom: 10px;">
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                             ${item.image ? `<img src="${item.image}" alt="${item.name}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">` : ''}
                              <div style="text-align: left;">
-                                 <div style="font-size: 14px; font-weight: 700; color: #db2777;">${item.name}</div>
-                                 <div style="font-size: 12px; color: #9ca3af;">
-                                     Qty: ${item.quantity} 
-                                     ${item.selectedVariation ? `• <span style="background: #fdf2f8; padding: 2px 6px; border-radius: 4px; color: #be185d; font-weight: 600;">${item.selectedVariation}</span>` : ''}
+                                 <div style="font-size: 13px; font-weight: 700; color: #fff; text-transform: uppercase;">${item.name}</div>
+                                 <div style="font-size: 11px; color: #94a3b8; margin-top: 4px;">
+                                     CANT: ${item.quantity} 
+                                     ${item.selectedVariation ? `• <span style="color: #EC4899;">${item.selectedVariation}</span>` : ''}
                                  </div>
                              </div>
                         </div>
-                        <span style="font-weight: 800; color: #db2777;">$${item.price.toLocaleString()}</span>
+                        <span style="font-weight: 700; color: #EC4899;">$${item.price.toLocaleString()}</span>
                     </div>
                 `).join('')}
                 <div class="total">Total: $${order.totalPrice.toLocaleString()}</div>
@@ -92,16 +92,17 @@ const sendOrderEmail = async (order, user) => {
         `;
 
         const htmlContent = getTemplate(
-            `¡Gracias por tu compra, ${(user.name || 'Cliente').split(' ')[0]}! 💖`,
-            `Estamos preparando tu pedido #${order._id} con mucho cuidado y cariño. Aquí tienes un resumen de tus cositas maravillosas:<br/><br/>${itemsHtml}`,
+            `¡PEDIDO CONFIRMADO!`,
+            `Hola <strong>${(user.name || 'Cliente').split(' ')[0]}</strong>,<br/><br/>
+            Tu pedido <strong>#${order._id}</strong> ha sido recibido exitosamente. Estamos preparándolo para envío.<br/><br/>${itemsHtml}`,
             'https://kimjuhogar.com/profile', // Link to view order
-            'Ver mi Pedido'
+            'VER MI PEDIDO'
         );
 
         const mailOptions = {
-            from: '"Kimju Hogar" <no-reply@kimjuhogar.com>',
+            from: '"Kimju Calzado" <no-reply@kimjuhogar.com>',
             to: user.email,
-            subject: `¡Tu pedido #${order._id} está confirmado! 🌸`,
+            subject: `✔ Pedido Confirmado #${order._id}`,
             html: htmlContent
         };
 
@@ -121,18 +122,15 @@ const sendAdminNewOrderEmail = async (order, user) => {
         const itemsHtml = `
             <div class="items-box">
                 ${order.orderItems.map(item => `
-                    <div class="item-row" style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #fce7f3; padding-bottom: 10px; margin-bottom: 10px;">
+                    <div class="item-row" style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px; margin-bottom: 10px;">
                         <div style="display: flex; align-items: center; gap: 10px;">
-                             ${item.image ? `<img src="${item.image}" alt="${item.name}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 8px; border: 1px solid #fce7f3;">` : ''}
+                             ${item.image ? `<img src="${item.image}" alt="${item.name}" style="width: 40px; height: 40px; object-fit: cover; border-radius: 6px;">` : ''}
                              <div style="text-align: left;">
-                                 <div style="font-size: 14px; font-weight: 700; color: #db2777;">${item.name}</div>
-                                 <div style="font-size: 12px; color: #9ca3af;">
-                                     Qty: ${item.quantity} 
-                                     ${item.selectedVariation ? `• <span style="background: #fdf2f8; padding: 2px 6px; border-radius: 4px; color: #be185d; font-weight: 600;">${item.selectedVariation}</span>` : ''}
-                                 </div>
+                                 <div style="font-size: 12px; font-weight: 700; color: #fff;">${item.name}</div>
+                                 <div style="font-size: 10px; color: #94a3b8;">x${item.quantity}</div>
                              </div>
                         </div>
-                        <span style="font-weight: 800; color: #db2777;">$${item.price.toLocaleString()}</span>
+                        <span style="font-weight: 700; color: #EC4899;">$${item.price.toLocaleString()}</span>
                     </div>
                 `).join('')}
                 <div class="total">Total: $${order.totalPrice.toLocaleString()}</div>
@@ -140,30 +138,33 @@ const sendAdminNewOrderEmail = async (order, user) => {
         `;
 
         const customerInfoHtml = `
-            <div style="background-color: #fdf2f8; padding: 15px; border-radius: 10px; margin-bottom: 20px; text-align: left; font-size: 14px; color: #4b5563;">
-                 <strong style="color: #db2777;">Datos del Cliente:</strong><br/>
-                 👤 <strong>Nombre:</strong> ${user.name}<br/>
-                 📧 <strong>Email:</strong> ${user.email}<br/>
-                 📞 <strong>Teléfono:</strong> ${order.shippingAddress.phone || user.phone || 'N/A'}<br/>
-                 📍 <strong>Dirección:</strong> ${order.shippingAddress.address}, ${order.shippingAddress.city}, ${order.shippingAddress.state}<br/>
-                 🆔 <strong>ID/CC:</strong> ${order.shippingAddress.legalId || 'N/A'}
+            <div class="data-box">
+                 <div style="text-transform: uppercase; font-weight: 900; letter-spacing: 1px; margin-bottom: 10px; color: #EC4899; border-bottom: 1px solid rgba(236, 72, 153, 0.2); padding-bottom: 5px;">Datos del Cliente</div>
+                 <div style="margin-bottom: 5px;">👤 <strong style="color: #fff;">${user.name}</strong></div>
+                 <div style="margin-bottom: 5px;">📧 ${user.email}</div>
+                 <div style="margin-bottom: 5px;">📞 ${order.shippingAddress.phone || user.phone || 'N/A'}</div>
+                 <div style="margin-bottom: 5px;">🆔 C.C. ${order.shippingAddress.legalId || 'N/A'}</div>
+                 <div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed rgba(255,255,255,0.1);">
+                    📍 <span style="color: #fff;">${order.shippingAddress.address}</span><br/>
+                    ${order.shippingAddress.neighborhood ? `${order.shippingAddress.neighborhood}, ` : ''}${order.shippingAddress.city}, ${order.shippingAddress.state}
+                 </div>
             </div>
         `;
 
         const htmlContent = getTemplate(
-            '¡Nueva Venta Realizada! 🎉',
-            `¡Felicidades! Se ha realizado una nueva compra en Kimju Hogar.<br/><br/>
+            'NUEVA VENTA REALIZADA',
+            `¡Excelente noticia! Se ha registrado una nueva venta en la plataforma.<br/><br/>
             ${customerInfoHtml}
-            <strong>Detalle del Pedido #${order._id}:</strong><br/>
+            <div style="text-align: left; font-weight: 700; color: #fff; margin-bottom: 10px; text-transform: uppercase;">Detalle de Orden #${order._id}</div>
             ${itemsHtml}`,
             `https://kimjuhogar.com/admin`,
-            'Ir al Panel Admin'
+            'PANEL ADMINISTRATIVO'
         );
 
         const mailOptions = {
             from: '"Kimju Bot 🤖" <no-reply@kimjuhogar.com>',
             to: adminEmail,
-            subject: `¡Nueva Venta! 🤑 Orden #${order._id} - $${order.totalPrice.toLocaleString()}`,
+            subject: `💰 Nueva Venta #${order._id} - $${order.totalPrice.toLocaleString()}`,
             html: htmlContent
         };
 
@@ -177,8 +178,6 @@ const sendAdminNewOrderEmail = async (order, user) => {
 
 const sendTrackingEmail = async (order, trackingNumber) => {
     try {
-        // Populate user if needed, or assume order.shippingAddress has email if user is null (guest)
-        // Ideally order should be populated with user before calling this, or assume order.user is the object.
         const recipientEmail = order.user?.email || order.shippingAddress.email;
         const recipientName = order.user?.name || order.shippingAddress.fullName || 'Cliente';
 
@@ -190,19 +189,20 @@ const sendTrackingEmail = async (order, trackingNumber) => {
         console.log(`[EMAIL] Sending Tracking Info to ${recipientEmail}`);
 
         const htmlContent = getTemplate(
-            '¡Tu pedido está en camino! 🚚',
-            `Hola ${recipientName.split(' ')[0]},<br/><br/>
-            ¡Buenas noticias! Hemos enviado tu pedido <strong>#${order._id}</strong>.<br/><br/>
-            Tu número de guía es: <strong style="font-size: 18px; color: #db2777; background: #fce7f3; padding: 5px 10px; border-radius: 5px;">${trackingNumber}</strong><br/><br/>
-            Puedes rastrear tu paquete usando este número en la transportadora correspondiente.`,
+            'TU PEDIDO ESTÁ EN CAMINO',
+            `Hola <strong>${recipientName.split(' ')[0]}</strong>,<br/><br/>
+            Tu pedido <strong>#${order._id}</strong> ha sido enviado y va en camino a tu dirección.<br/><br/>
+            Número de Guía:<br/>
+            <div style="font-size: 20px; font-weight: 900; color: #EC4899; background: rgba(236, 72, 153, 0.1); padding: 10px; border-radius: 10px; display: inline-block; margin: 10px 0; border: 1px dashed #EC4899; letter-spacing: 2px;">${trackingNumber}</div><br/><br/>
+            Ingresa este número en la página de la transportadora para ver el estado.`,
             'https://kimjuhogar.com/profile',
-            'Ver mi Pedido'
+            'RASTREAR PEDIDO'
         );
 
         const mailOptions = {
-            from: '"Kimju Hogar" <no-reply@kimjuhogar.com>',
+            from: '"Kimju Calzado" <no-reply@kimjuhogar.com>',
             to: recipientEmail,
-            subject: `🚚 ¡Tu pedido #${order._id} ha sido enviado!`,
+            subject: `🚚 Pedido Enviado #${order._id}`,
             html: htmlContent
         };
 
@@ -230,7 +230,7 @@ const sendRecoveryEmail = async (user, token) => {
         );
 
         const mailOptions = {
-            from: '"Kimju Hogar" <no-reply@kimjuhogar.com>',
+            from: '"Kimju Calzado" <no-reply@kimjuhogar.com>',
             to: user.email,
             subject: 'Recuperación de Contraseña - Kimju Hogar',
             html: htmlContent
@@ -247,7 +247,7 @@ const sendRecoveryEmail = async (user, token) => {
 const sendEmail = async ({ email, subject, html }) => {
     try {
         const mailOptions = {
-            from: '"Kimju Hogar" <no-reply@kimjuhogar.com>',
+            from: '"Kimju Calzado" <no-reply@kimjuhogar.com>',
             to: email,
             subject: subject,
             html: html
