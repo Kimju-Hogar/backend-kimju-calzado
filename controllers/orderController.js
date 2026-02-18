@@ -1,6 +1,7 @@
 const Order = require('../models/Order');
 const Product = require('../models/Product');
 const { sendOrderEmail, sendAdminNewOrderEmail, sendTrackingEmail } = require('../utils/emailService');
+const axios = require('axios');
 
 // @desc    Get all orders
 // @route   GET /api/orders
@@ -194,6 +195,40 @@ exports.verifyWompiPayment = async (req, res) => {
             if (fullUser) {
                 await sendOrderEmail(updatedOrder, fullUser);
                 await sendAdminNewOrderEmail(updatedOrder, fullUser);
+            }
+
+            // Sync to Panel
+            try {
+                if (process.env.PANEL_API_URL && process.env.SYNC_SECRET) {
+                    const syncItems = [];
+                    for (const item of updatedOrder.orderItems) {
+                        const productDoc = await Product.findById(item.product);
+                        if (productDoc) {
+                            syncItems.push({
+                                sku: productDoc.sku || productDoc.name,
+                                quantity: item.quantity,
+                                price: item.price
+                            });
+                        }
+                    }
+
+                    await axios.post(`${process.env.PANEL_API_URL}/api/sync/sales`, {
+                        orderId: updatedOrder._id,
+                        products: syncItems,
+                        totalAmount: updatedOrder.totalPrice,
+                        paymentMethod: 'Wompi',
+                        customer: {
+                            name: fullUser ? fullUser.name : 'Guest',
+                            email: fullUser ? fullUser.email : (updatedOrder.shippingAddress.email || '')
+                        },
+                        origin: 'Kingyu Calzado'
+                    }, {
+                        headers: { 'x-sync-secret': process.env.SYNC_SECRET }
+                    });
+                    console.log(`Synced sale ${updatedOrder._id} to Panel`);
+                }
+            } catch (syncErr) {
+                console.error("Failed to sync sale to Panel:", syncErr.message);
             }
 
             res.json(updatedOrder);
