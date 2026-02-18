@@ -1,16 +1,28 @@
 const Category = require('../models/Category');
 const Product = require('../models/Product');
 
-// @desc    Get all categories
+const PRODUCT_TYPE = process.env.PRODUCT_TYPE || 'calzado';
+
+// @desc    Get categories (only those with products of the matching type)
 // @route   GET /api/categories
 // @access  Public
 exports.getCategories = async (req, res) => {
     try {
-        const categories = await Category.find();
+        // Get distinct category names from products of this type
+        const usedCategories = await Product.distinct('category', {
+            type: PRODUCT_TYPE,
+            status: 'active'
+        });
 
-        // Add product counts to each category
+        // Only return categories that are actually used by products of this type
+        const categories = await Category.find({ name: { $in: usedCategories } });
+
         const categoriesWithCounts = await Promise.all(categories.map(async (cat) => {
-            const count = await Product.countDocuments({ category: cat.name });
+            const count = await Product.countDocuments({
+                category: cat.name,
+                type: PRODUCT_TYPE,
+                status: 'active'
+            });
             return {
                 ...cat.toObject(),
                 productCount: count
