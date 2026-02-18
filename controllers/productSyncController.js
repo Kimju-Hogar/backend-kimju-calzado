@@ -1,4 +1,5 @@
 const Product = require('../models/Product');
+const Category = require('../models/Category');
 
 // @desc    Sync product from Panel (Create or Update)
 // @route   POST /api/sync/products
@@ -15,6 +16,30 @@ const syncProduct = async (req, res) => {
             category,
             type
         } = req.body;
+
+        // --- Category Handling ---
+        if (category) {
+            try {
+                let catDoc = await Category.findOne({ name: category });
+                if (!catDoc) {
+                    // Create Category if not exists
+                    const slug = category.toLowerCase().replace(/ /g, '-').replace(/[^\w-]+/g, '');
+
+                    catDoc = new Category({
+                        name: category,
+                        slug: slug,
+                        description: `Category for ${category}`,
+                        icon: 'Box' // Default icon
+                    });
+
+                    await catDoc.save();
+                    console.log(`Created new category: ${category}`);
+                }
+            } catch (catErr) {
+                console.error("Error creating category during sync:", catErr.message);
+                // Continue even if category creation fails
+            }
+        }
 
         // Try to find by SKU first (if implemented), or Name as fallback
         // Note: We are adding SKU to model, so we should try to use it.
