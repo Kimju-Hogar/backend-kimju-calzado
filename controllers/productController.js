@@ -20,7 +20,7 @@ const transformProduct = (product) => {
         name: p.name,
         sku: p.sku,
         description: p.description || '',
-        price: Math.round(p.publicPrice * PRICE_MARKUP),
+        price: p.publicPrice,
         category: p.category,
         image: imageUrl,
         images: p.images || [],
