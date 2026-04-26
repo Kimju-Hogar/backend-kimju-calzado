@@ -35,6 +35,10 @@ const productSchema = new mongoose.Schema({
         size: { type: String, required: true },
         stock: { type: Number, required: true, default: 0 }
     }],
+    colors: [{
+        color: { type: String, required: true },
+        stock: { type: Number, required: true, default: 0 }
+    }],
     costPrice: {
         type: Number,
         default: 0
