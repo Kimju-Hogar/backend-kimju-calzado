@@ -25,10 +25,9 @@ const transformProduct = (product) => {
         image: imageUrl,
         images: p.images || [],
         stock: p.stock,
-        sizes: (p.sizes || []).map(s => ({
-            size: s.size,
-            stock: s.stock || 0
-        })),
+        type: p.type || PRODUCT_TYPE,
+        sizes: p.sizes || [],
+        colors: p.colors || [],
         variations: p.variations || [],
         isFeatured: p.isFeatured || false,
         discount: p.discount || 0,
