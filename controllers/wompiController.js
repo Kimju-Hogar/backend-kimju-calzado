@@ -188,25 +188,15 @@ wompiController.handleWebhook = async (req, res) => {
 
 /**
  * Verify Transaction Status (Called by Frontend after redirect)
+ * Uses Wompi Transaction ID directly
  */
 wompiController.verifyTransaction = async (req, res) => {
     try {
         const { id } = req.params; // Transaction ID from Wompi
         if (!id) return res.status(400).json({ msg: 'Transaction ID is required' });
 
-        // Fetch transaction from Wompi API
-        // Use native fetch (Node 18+) or ensure axios is available
-        // Sandbox/Production URL depends on environment. Ideally use configured URL or infer.
-        // Wompi Public Key is needed for Bearer token or just public access for some endpoints?
-        // Wompi API requires Public Key as Bearer token for querying transactions? Or Private? 
-        // Documentation says: GET /v1/transactions/:id with Public Key usually works for status.
-
-        const isProduction = process.env.NODE_ENV === 'production';
         const publicKey = process.env.WOMPI_PUBLIC_KEY;
-
-        // Determine environment based on key prefix
         const isSandboxKey = publicKey && publicKey.startsWith('pub_test_');
-
         const wompiUrl = isSandboxKey
             ? 'https://sandbox.wompi.co/v1/transactions'
             : 'https://production.wompi.co/v1/transactions';
@@ -215,9 +205,7 @@ wompiController.verifyTransaction = async (req, res) => {
 
         const response = await fetch(`${wompiUrl}/${id}`, {
             method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${publicKey}`
-            }
+            headers: { 'Authorization': `Bearer ${publicKey}` }
         });
 
         if (!response.ok) {
@@ -230,6 +218,79 @@ wompiController.verifyTransaction = async (req, res) => {
     } catch (error) {
         console.error('Verify Transaction Error:', error);
         res.status(500).json({ msg: 'Error verifying transaction' });
+    }
+};
+
+/**
+ * Verify Transaction by Reference/OrderId (Fallback when transactionId is not available)
+ * Searches Wompi for any transaction using the orderId as the reference
+ * @route GET /api/payments/verify-by-reference/:orderId
+ */
+wompiController.verifyTransactionByReference = async (req, res) => {
+    try {
+        const { orderId } = req.params;
+        if (!orderId) return res.status(400).json({ msg: 'Order ID is required' });
+
+        const publicKey = process.env.WOMPI_PUBLIC_KEY;
+        const isSandboxKey = publicKey && publicKey.startsWith('pub_test_');
+        const wompiUrl = isSandboxKey
+            ? 'https://sandbox.wompi.co/v1/transactions'
+            : 'https://production.wompi.co/v1/transactions';
+
+        console.log(`[WOMPI] Searching transaction by reference=${orderId} in ${isSandboxKey ? 'SANDBOX' : 'PRODUCTION'}`);
+
+        // Search by reference in Wompi
+        const response = await fetch(`${wompiUrl}?reference=${orderId}`, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${publicKey}` }
+        });
+
+        if (!response.ok) {
+            // If Wompi API fails, fall back to checking DB directly
+            const order = await Order.findById(orderId);
+            if (!order) return res.status(404).json({ msg: 'Order not found' });
+            return res.json({
+                status: order.isPaid ? 'APPROVED' : 'PENDING',
+                orderId,
+                isPaid: order.isPaid
+            });
+        }
+
+        const data = await response.json();
+        const transactions = data.data;
+
+        // If no transactions found by reference, check order DB status directly
+        if (!transactions || transactions.length === 0) {
+            const order = await Order.findById(orderId);
+            if (!order) return res.status(404).json({ msg: 'Order not found' });
+            return res.json({
+                status: order.isPaid ? 'APPROVED' : 'PENDING',
+                orderId,
+                isPaid: order.isPaid
+            });
+        }
+
+        // Find the most recent approved transaction, or the latest one
+        const approvedTx = transactions.find(t => t.status === 'APPROVED');
+        const latestTx = approvedTx || transactions[0];
+
+        return await processTransactionData(latestTx, res);
+
+    } catch (error) {
+        console.error('Verify By Reference Error:', error);
+        // Graceful fallback: check local DB
+        try {
+            const { orderId } = req.params;
+            const order = await Order.findById(orderId);
+            if (order) {
+                return res.json({
+                    status: order.isPaid ? 'APPROVED' : 'PENDING',
+                    orderId,
+                    isPaid: order.isPaid
+                });
+            }
+        } catch (dbErr) { /* ignore */ }
+        res.status(500).json({ msg: 'Error verifying transaction by reference' });
     }
 };
 

@@ -13,9 +13,14 @@ router.post('/signature', wompiController.generateSignature);
 // @access  Public
 router.post('/webhook', wompiController.handleWebhook);
 
-// @desc    Verify Wompi Transaction (Frontend Redirect)
+// @desc    Verify Wompi Transaction (Frontend Redirect by TransactionId)
 // @route   GET /api/payments/verify/:id
-// @access  Private (or Public if needed, but safer Private)
+// @access  Private
 router.get('/verify/:id', wompiController.verifyTransaction);
+
+// @desc    Verify Wompi Transaction by Reference/OrderId (Fallback - no transactionId needed)
+// @route   GET /api/payments/verify-by-reference/:orderId
+// @access  Private
+router.get('/verify-by-reference/:orderId', wompiController.verifyTransactionByReference);
 
 module.exports = router;
