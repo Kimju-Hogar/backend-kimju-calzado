@@ -1,3 +1,4 @@
+const addiController = require('../controllers/addiController');
 const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/authMiddleware');
@@ -24,3 +25,7 @@ router.get('/verify/:id', wompiController.verifyTransaction);
 router.get('/verify-by-reference/:orderId', wompiController.verifyTransactionByReference);
 
 module.exports = router;
+
+// Addi Routes
+router.post('/addi/create', auth, addiController.createApplication);
+router.post('/addi/verify', addiController.verifyApplication);
