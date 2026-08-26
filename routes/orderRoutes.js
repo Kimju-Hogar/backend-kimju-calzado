@@ -8,20 +8,26 @@ const {
     updateOrderToPaid,
     updateOrderStatus,
     verifyWompiPayment,
-
-    updateOrderTracking
+    updateOrderTracking,
 } = require('../controllers/orderController');
-const { getInvoice } = require('../controllers/invoiceController');
 const auth = require('../middleware/authMiddleware');
+const admin = require('../middleware/adminMiddleware');
+const { getInvoice } = require('../controllers/invoiceController');
 
+// Las rutas literales van antes que las de parametro para que /myorders y
+// /pay-wompi no queden atrapadas por /:id.
 router.post('/', auth, addOrderItems);
 router.get('/myorders', auth, getMyOrders);
-router.get('/', auth, getOrders);
-router.get('/:id', auth, getOrderById);
-router.put('/:id/pay', auth, updateOrderToPaid);
 router.put('/pay-wompi', auth, verifyWompiPayment);
-router.put('/:id/status', auth, updateOrderStatus);
-router.put('/:id/tracking', auth, updateOrderTracking);
+
+// Listar TODAS las ordenes es informacion de administracion: antes bastaba con
+// estar logueado para verlas todas.
+router.get('/', auth, admin, getOrders);
+
+router.get('/:id', auth, getOrderById);
+router.put('/:id/pay', auth, admin, updateOrderToPaid);
+router.put('/:id/status', auth, admin, updateOrderStatus);
+router.put('/:id/tracking', auth, admin, updateOrderTracking);
 router.get('/:id/invoice', auth, getInvoice);
 
 module.exports = router;

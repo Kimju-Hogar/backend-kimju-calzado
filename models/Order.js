@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { PAYMENT_METHOD_CODES } = require('../config/payments');
 
 const orderSchema = new mongoose.Schema({
     user: {
@@ -17,6 +18,7 @@ const orderSchema = new mongoose.Schema({
             quantity: { type: Number, required: true },
             price: { type: Number, required: true },
             image: { type: String },
+            selectedVariation: { type: String }, // Talla o color elegido
         }
     ],
     shippingAddress: {
@@ -31,15 +33,44 @@ const orderSchema = new mongoose.Schema({
         country: { type: String, required: true },
         additionalInfo: { type: String },
     },
+    // Codigo canonico del medio de pago. La lista vive en config/payments.js
+    // y es la misma que usa el Panel de Contabilidad para agrupar reportes.
     paymentMethod: {
         type: String,
         required: true,
+        enum: PAYMENT_METHOD_CODES,
+        default: 'WOMPI',
     },
-    paymentResult: { // From payment gateway
+    paymentResult: { // Respuesta de la pasarela
         id: { type: String },
         status: { type: String },
         update_time: { type: String },
         email_address: { type: String },
+    },
+    // Solicitud de credito a cuotas (Addi / Sistecredito).
+    // applicationId es la unica referencia valida: se lee de aqui, nunca del cliente.
+    creditApplication: {
+        provider: { type: String, enum: ['ADDI', 'SISTECREDITO'] },
+        applicationId: { type: String, index: true },
+        status: {
+            type: String,
+            enum: ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED', 'EXPIRED'],
+            default: 'PENDING',
+        },
+        rawStatus: { type: String },   // Estado tal cual lo devuelve el financiador
+        redirectUrl: { type: String }, // URL real del financiador
+        simulated: { type: Boolean, default: false },
+        createdAt: { type: Date },
+        updatedAt: { type: Date },
+    },
+    // Evita enviar la misma venta dos veces a contabilidad.
+    syncedToPanel: {
+        type: Boolean,
+        default: false,
+    },
+    itemsPrice: {
+        type: Number,
+        default: 0.0,
     },
     taxPrice: {
         type: Number,

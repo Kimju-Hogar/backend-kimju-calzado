@@ -1,31 +1,68 @@
-const addiController = require('../controllers/addiController');
 const express = require('express');
 const router = express.Router();
+
 const auth = require('../middleware/authMiddleware');
 const wompiController = require('../controllers/wompiController');
+const installmentController = require('../controllers/installmentController');
 
-// @desc    Generate Wompi Signature
+// ── Medios de pago disponibles ───────────────────────────────────────────────
+
+// @desc    Medios de pago habilitados y sus límites
+// @route   GET /api/payments/methods
+// @access  Público
+router.get('/methods', installmentController.getAvailableMethods);
+
+// ── Wompi ────────────────────────────────────────────────────────────────────
+
+// @desc    Firma de integridad para el widget
 // @route   POST /api/payments/signature
-// @access  Private
 router.post('/signature', wompiController.generateSignature);
 
-// @desc    Wompi Webhook
+// @desc    Webhook de Wompi
 // @route   POST /api/payments/webhook
-// @access  Public
+// @access  Público
 router.post('/webhook', wompiController.handleWebhook);
 
-// @desc    Verify Wompi Transaction (Frontend Redirect by TransactionId)
+// @desc    Verificar transacción de Wompi (regreso del widget)
 // @route   GET /api/payments/verify/:id
-// @access  Private
 router.get('/verify/:id', wompiController.verifyTransaction);
-
-// @desc    Verify Wompi Transaction by Reference/OrderId (Fallback - no transactionId needed)
+// @desc    Verificar transacción de Wompi por referencia (respaldo)
 // @route   GET /api/payments/verify-by-reference/:orderId
-// @access  Private
 router.get('/verify-by-reference/:orderId', wompiController.verifyTransactionByReference);
 
-module.exports = router;
+// ── Pagos a cuotas: Addi y Sistecrédito ──────────────────────────────────────
 
-// Addi Routes
-router.post('/addi/create', auth, addiController.createApplication);
-router.post('/addi/verify', addiController.verifyApplication);
+// @desc    Crear la solicitud de crédito en el financiador
+// @route   POST /api/payments/credit/:provider/create
+// @access  Privado
+router.post('/credit/:provider/create', auth, installmentController.createApplication);
+
+// @desc    Consultar el estado real de la solicitud
+// @route   POST /api/payments/credit/verify
+// @access  Privado
+router.post('/credit/verify', auth, installmentController.verifyApplication);
+
+// @desc    Decisión manual del simulador (solo fuera de producción)
+// @route   POST /api/payments/credit/simulator/decide
+// @access  Privado
+router.post('/credit/simulator/decide', auth, installmentController.simulatorDecide);
+
+// @desc    Notificación del financiador
+// @route   POST /api/payments/credit/:provider/webhook
+// @access  Público
+router.post('/credit/:provider/webhook', installmentController.handleWebhook);
+
+// ── Compatibilidad con las rutas antiguas de Addi ────────────────────────────
+// Las conserva un frontend ya desplegado. Ojo: /addi/verify ya NO acepta un
+// `status` enviado por el cliente; el estado se consulta contra Addi.
+router.post('/addi/create', auth, (req, res) => {
+    req.params.provider = 'ADDI';
+    return installmentController.createApplication(req, res);
+});
+router.post('/addi/verify', auth, installmentController.verifyApplication);
+router.post('/addi/webhook', (req, res) => {
+    req.params.provider = 'ADDI';
+    return installmentController.handleWebhook(req, res);
+});
+
+module.exports = router;

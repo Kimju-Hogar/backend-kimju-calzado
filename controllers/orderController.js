@@ -1,11 +1,11 @@
 const Order = require('../models/Order');
-const Product = require('../models/Product');
-const { sendOrderEmail, sendAdminNewOrderEmail, sendTrackingEmail } = require('../utils/emailService');
-const axios = require('axios');
+const { sendTrackingEmail } = require('../utils/emailService');
+const { markOrderAsPaid } = require('../utils/orderFulfillment');
+const { normalizePaymentMethod, PAYMENT_METHODS } = require('../config/payments');
 
-// @desc    Get all orders
+// @desc    Listar todas las ordenes
 // @route   GET /api/orders
-// @access  Private/Admin
+// @access  Privado/Admin
 exports.getOrders = async (req, res) => {
     try {
         const orders = await Order.find({}).populate('user', 'id name email');
@@ -15,75 +15,84 @@ exports.getOrders = async (req, res) => {
     }
 };
 
-// @desc    Create new order
+// @desc    Crear una orden
 // @route   POST /api/orders
-// @access  Private
+// @access  Privado
 exports.addOrderItems = async (req, res) => {
     try {
-        const { orderItems, shippingAddress, paymentMethod, itemsPrice, taxPrice, shippingPrice, totalPrice } = req.body;
+        const {
+            orderItems,
+            shippingAddress,
+            paymentMethod,
+            itemsPrice,
+            taxPrice,
+            shippingPrice,
+            totalPrice,
+        } = req.body;
 
-        if (orderItems && orderItems.length === 0) {
-            res.status(400);
-            throw new Error('No order items');
-        } else {
-            const order = new Order({
-                user: req.user.id,
-                orderItems,
-                shippingAddress: {
-                    ...shippingAddress,
-                    // Ensure legalId is passed if it exists in shippingAddress object
-                    legalId: shippingAddress.legalId
-                },
-                paymentMethod,
-                itemsPrice,
-                taxPrice,
-                shippingPrice,
-                totalPrice
-            });
-
-            const createdOrder = await order.save();
-
-
-            // Emails will be sent after Wompi Payment Verification
-            // const fullUser = await require('../models/User').findById(req.user.id);
-            // if (fullUser) {
-            //    await sendOrderEmail(createdOrder, fullUser);
-            //    await sendAdminNewOrderEmail(createdOrder, fullUser);
-            // }
-
-            res.status(201).json(createdOrder);
+        if (!orderItems || orderItems.length === 0) {
+            return res.status(400).json({ message: 'La orden no tiene productos' });
         }
+
+        // El medio de pago se valida contra el catalogo. Antes el checkout
+        // mandaba siempre 'WOMPI' aunque el cliente eligiera pagar a cuotas, y
+        // esa etiqueta equivocada era la que terminaba en los reportes.
+        const method = normalizePaymentMethod(paymentMethod);
+        if (!method) {
+            return res.status(400).json({
+                message: `Medio de pago no valido. Opciones: ${Object.keys(PAYMENT_METHODS).join(', ')}`,
+            });
+        }
+
+        const order = new Order({
+            user: req.user.id,
+            orderItems,
+            shippingAddress: {
+                ...shippingAddress,
+                legalId: shippingAddress?.legalId,
+            },
+            paymentMethod: method,
+            itemsPrice,
+            taxPrice,
+            shippingPrice,
+            totalPrice,
+        });
+
+        const createdOrder = await order.save();
+
+        // Los correos salen cuando el pago queda confirmado, no antes.
+        res.status(201).json(createdOrder);
     } catch (err) {
-        console.error('Error creating order:', err);
+        console.error('Error creando la orden:', err);
         res.status(500).json({ message: err.message });
     }
 };
 
-// @desc    Get order by ID
+// @desc    Obtener una orden por id
 // @route   GET /api/orders/:id
-// @access  Private
+// @access  Privado
 exports.getOrderById = async (req, res) => {
     try {
         const order = await Order.findById(req.params.id).populate('user', 'name email');
 
-        if (order) {
-            if (req.user.role === 'admin' || order.user._id.toString() === req.user.id) {
-                res.json(order);
-            } else {
-                res.status(401).json({ msg: 'Not authorized to view this order' });
-            }
-        } else {
-            res.status(404).json({ msg: 'Order not found' });
+        if (!order) {
+            return res.status(404).json({ msg: 'Orden no encontrada' });
         }
+
+        if (req.user.role === 'admin' || order.user._id.toString() === req.user.id) {
+            return res.json(order);
+        }
+
+        res.status(401).json({ msg: 'No autorizado para ver esta orden' });
     } catch (err) {
         console.error(err.message);
         res.status(500).send('Server Error');
     }
 };
 
-// @desc    Get logged in user orders
+// @desc    Ordenes del usuario autenticado
 // @route   GET /api/orders/myorders
-// @access  Private
+// @access  Privado
 exports.getMyOrders = async (req, res) => {
     try {
         const orders = await Order.find({ user: req.user.id }).sort({ createdAt: -1 });
@@ -94,186 +103,127 @@ exports.getMyOrders = async (req, res) => {
     }
 };
 
-// @desc    Update order to paid
+// @desc    Marcar una orden como pagada manualmente
 // @route   PUT /api/orders/:id/pay
-// @access  Private/Admin
+// @access  Privado/Admin
 exports.updateOrderToPaid = async (req, res) => {
     try {
-        const order = await Order.findById(req.params.id);
-
-        if (order) {
-            order.isPaid = true;
-            order.paidAt = Date.now();
-            order.paymentResult = {
-                id: 'MANUAL_PAYMENT',
-                status: 'completed',
-                update_time: Date.now().toString(),
-                email_address: order.shippingAddress.email || 'manual@system.com'
-            };
-
-            const updatedOrder = await order.save();
-            res.json(updatedOrder);
-        } else {
-            res.status(404).json({ message: 'Order not found' });
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ message: 'Solo un administrador puede registrar un pago manual' });
         }
+
+        const order = await Order.findById(req.params.id);
+        if (!order) {
+            return res.status(404).json({ message: 'Orden no encontrada' });
+        }
+
+        const updatedOrder = await markOrderAsPaid(order, {
+            method: 'MANUAL',
+            transactionId: 'MANUAL_PAYMENT',
+            rawStatus: 'MANUAL',
+            customerEmail: order.shippingAddress?.email,
+        });
+
+        res.json(updatedOrder);
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
 };
 
-// @desc    Update order status
+// @desc    Cambiar el estado de una orden
 // @route   PUT /api/orders/:id/status
-// @access  Private/Admin
+// @access  Privado/Admin
 exports.updateOrderStatus = async (req, res) => {
     try {
         const { status } = req.body;
         const order = await Order.findById(req.params.id);
 
-        if (order) {
-            order.status = status;
-            if (status === 'Delivered') {
-                order.isDelivered = true;
-                order.deliveredAt = Date.now();
-            }
-            const updatedOrder = await order.save();
-            res.json(updatedOrder);
-        } else {
-            res.status(404).json({ message: 'Order not found' });
+        if (!order) {
+            return res.status(404).json({ message: 'Orden no encontrada' });
         }
+
+        order.status = status;
+        if (status === 'Delivered') {
+            order.isDelivered = true;
+            order.deliveredAt = Date.now();
+        }
+
+        const updatedOrder = await order.save();
+        res.json(updatedOrder);
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
 };
 
-// @desc    Verify Wompi Payment and Update Order
+// @desc    Confirmar un pago de Wompi desde el frontend
 // @route   PUT /api/orders/pay-wompi
-// @access  Private
+// @access  Privado
+//
+// Descontar stock, enviar correos y reportar la venta al panel ya no se hace
+// aqui a mano: todo eso vive en markOrderAsPaid, el mismo camino que usan Addi
+// y Sistecredito. Asi las tres formas de pago se comportan igual.
 exports.verifyWompiPayment = async (req, res) => {
     try {
-        const { transactionId, reference, transactionData } = req.body;
+        const { transactionId, reference, orderId } = req.body;
 
-        let order;
-        // Attempt to find by ID if reference looks like a MongoID, otherwise we might need a reference field.
-
-        // Priority: supplied orderId (simplest) > transaction reference (if it matches ID)
-
-        if (req.body.orderId) {
-            order = await Order.findById(req.body.orderId);
-        } else if (reference && reference.match(/^[0-9a-fA-F]{24}$/)) {
+        let order = null;
+        if (orderId) {
+            order = await Order.findById(orderId);
+        } else if (reference && /^[0-9a-fA-F]{24}$/.test(reference)) {
             order = await Order.findById(reference);
         }
 
-        if (order) {
-            if (order.isPaid) {
-                return res.json(order); // Already processed
-            }
-
-            order.isPaid = true;
-            order.paidAt = Date.now();
-            order.paymentResult = {
-                id: transactionId,
-                status: 'APPROVED',
-                update_time: new Date().toISOString(),
-                email_address: order.shippingAddress?.email || req.user.email
-            };
-            // Also update status to 'Processing' instead of just 'Pending' if paid
-            order.status = 'Processing';
-
-            // Reduce Stock
-            for (const item of order.orderItems) {
-                const product = await Product.findById(item.product);
-                if (product) {
-                    product.stock = Math.max(0, product.stock - item.quantity);
-                    await product.save();
-                }
-            }
-
-            const updatedOrder = await order.save();
-
-            // Send Notifications (Only if just paid)
-            const fullUser = await require('../models/User').findById(order.user);
-            if (fullUser) {
-                await sendOrderEmail(updatedOrder, fullUser);
-                await sendAdminNewOrderEmail(updatedOrder, fullUser);
-            }
-
-            // Sync to Panel
-            try {
-                if (process.env.PANEL_API_URL && process.env.SYNC_SECRET) {
-                    const syncItems = [];
-                    for (const item of updatedOrder.orderItems) {
-                        const productDoc = await Product.findById(item.product);
-                        if (productDoc) {
-                            syncItems.push({
-                                sku: productDoc.sku || productDoc.name,
-                                quantity: item.quantity,
-                                price: item.price
-                            });
-                        }
-                    }
-
-                    await axios.post(`${process.env.PANEL_API_URL}/api/sync/sales`, {
-                        orderId: updatedOrder._id,
-                        products: syncItems,
-                        totalAmount: updatedOrder.totalPrice,
-                        paymentMethod: 'Wompi',
-                        customer: {
-                            name: fullUser ? fullUser.name : 'Guest',
-                            email: fullUser ? fullUser.email : (updatedOrder.shippingAddress.email || '')
-                        },
-                        origin: 'Kingyu Calzado'
-                    }, {
-                        headers: { 'x-sync-secret': process.env.SYNC_SECRET }
-                    });
-                    console.log(`Synced sale ${updatedOrder._id} to Panel`);
-                }
-            } catch (syncErr) {
-                console.error("Failed to sync sale to Panel:", syncErr.message);
-            }
-
-            res.json(updatedOrder);
-        } else {
-            res.status(404).json({ message: 'Order not found for this payment' });
+        if (!order) {
+            return res.status(404).json({ message: 'No se encontro la orden de este pago' });
         }
+
+        if (order.user.toString() !== req.user.id && req.user.role !== 'admin') {
+            return res.status(403).json({ message: 'No autorizado sobre esta orden' });
+        }
+
+        if (order.isPaid) {
+            return res.json(order);
+        }
+
+        const updatedOrder = await markOrderAsPaid(order, {
+            method: 'WOMPI',
+            transactionId,
+            rawStatus: 'APPROVED',
+            customerEmail: order.shippingAddress?.email || req.user.email,
+        });
+
+        res.json(updatedOrder);
     } catch (err) {
-        console.error("Wompi Verification Error:", err);
+        console.error('Error confirmando el pago de Wompi:', err);
         res.status(500).json({ message: err.message });
     }
 };
 
-// @desc    Update order tracking number
+// @desc    Registrar el numero de guia
 // @route   PUT /api/orders/:id/tracking
-// @access  Private/Admin
+// @access  Privado/Admin
 exports.updateOrderTracking = async (req, res) => {
     try {
         const { trackingNumber } = req.body;
         const order = await Order.findById(req.params.id).populate('user', 'name email');
 
-        if (order) {
-            // We can store tracking number in a new field or inside delivery status
-            // Checking Order model would be ideal, but I'll assume we can add a new field dynamically or `result` field.
-            // Let's treat it as part of `deliveryResult` or top level if schema permits.
-            // Javascript mongo models are flexible unless strict.
-            // I'll add `trackingNumber` to the order object.
-
-            // Note: Mongoose strict mode might strip this if not in schema. 
-            // We should ideally check Schema. But for now, let's try. 
-            // If it fails to save, we might need to use a 'mixed' field if available or add it to Schema.
-            // Assuming Schema is not provided, I will try to save. If it fails, I'll advise user or check schema.
-
-            order.trackingNumber = trackingNumber;
-            order.isDelivered = false; // Still in progress, but shipped?
-            order.status = 'Shipped'; // Update status to Shipped
-
-            const updatedOrder = await order.save(); // This might strip trackingNumber if strict: true
-
-            // Send Tracking Email
-            await sendTrackingEmail(updatedOrder, trackingNumber);
-
-            res.json(updatedOrder);
-        } else {
-            res.status(404).json({ message: 'Order not found' });
+        if (!order) {
+            return res.status(404).json({ message: 'Orden no encontrada' });
         }
+
+        order.trackingNumber = trackingNumber;
+        order.isDelivered = false;
+        order.status = 'Shipped';
+
+        const updatedOrder = await order.save();
+
+        try {
+            await sendTrackingEmail(updatedOrder, trackingNumber);
+        } catch (mailErr) {
+            console.error('Error enviando el correo de seguimiento:', mailErr.message);
+        }
+
+        res.json(updatedOrder);
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
