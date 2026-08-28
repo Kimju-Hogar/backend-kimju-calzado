@@ -25,8 +25,13 @@ const config = () => ({
     clientSecret: (process.env.ADDI_CLIENT_SECRET || '').trim(),
     authUrl: (process.env.ADDI_AUTH_URL || 'https://auth.addi.com/oauth/token').trim(),
     audience: (process.env.ADDI_AUDIENCE || 'https://api.addi.com').trim(),
-    apiUrl: (process.env.ADDI_API_URL || 'https://api.addi.com').replace(/\/+$/, ''),
+    apiUrl: (process.env.ADDI_API_URL || 'https://api.addi.com')
+        .replace(/["']/g, '')
+        .trim()
+        .replace(/\/+$/, ''),
     allySlug: (process.env.ADDI_ALLY_SLUG || '').trim(),
+    createPath: (process.env.ADDI_CREATE_PATH || '/v1/online-applications').trim(),
+    statusPath: (process.env.ADDI_STATUS_PATH || '/v1/applications/{id}').trim(),
     minAmount: Number(process.env.ADDI_MIN_AMOUNT || 150000),
     maxAmount: Number(process.env.ADDI_MAX_AMOUNT || 6000000),
 });
@@ -92,6 +97,8 @@ const getAccessToken = async () => {
         throw tag(err, 'AUTH');
     }
 
+    if (looksLikeWebPage(data)) throw urlError(cfg.authUrl, data);
+
     const accessToken = data.access_token || data.accessToken;
     if (!accessToken) {
         const err = new Error('Addi no devolvio un access_token');
@@ -102,6 +109,28 @@ const getAccessToken = async () => {
     const expiresInSeconds = Number(data.expires_in || 3600);
     tokenCache = { value: accessToken, expiresAt: now + expiresInSeconds * 1000 };
     return accessToken;
+};
+
+/**
+ * Detecta que el host respondio con una pagina web en vez de JSON.
+ *
+ * Paso de verdad: con ADDI_API_URL=https://api.addi.com la peticion devolvia
+ * 200 y el HTML de un sitio Next.js. El error resultante ("falta applicationId")
+ * apuntaba al esquema del payload, cuando en realidad la URL no era la de la
+ * API. Este chequeo lo dice explicitamente.
+ */
+const looksLikeWebPage = (data) =>
+    typeof data === 'string' && /^\s*(<!DOCTYPE|<html)/i.test(data);
+
+const urlError = (url, data, res) => {
+    const tipo = res?.headers?.['content-type'] || 'desconocido';
+    const err = new Error(
+        `${url} respondio HTTP ${res?.status ?? '?'} con content-type "${tipo}" ` +
+        `y el cuerpo es una pagina web, no JSON. ` +
+        `Recibido: ${String(data).slice(0, 120)}`
+    );
+    err.stage = 'URL_API';
+    return err;
 };
 
 const authorizedHeaders = async () => ({
@@ -170,11 +199,31 @@ const createApplication = async ({ order, customer, redirectUrl, webhookUrl, ite
 
     let data;
     try {
-        ({ data } = await axios.post(`${cfg.apiUrl}/v1/online-applications`, payload, {
+        const res = await axios.post(`${cfg.apiUrl}${cfg.createPath}`, payload, {
             timeout: TIMEOUT_MS,
             headers,
-        }));
+            // Sin seguir redirecciones: axios convierte el POST en GET al seguir
+            // un 302, y el resultado seria una pagina web con 200 que oculta el
+            // problema real. Mejor que falle diciendo a donde queria redirigir.
+            maxRedirects: 0,
+        });
+        data = res.data;
+
+        if (looksLikeWebPage(data)) {
+            throw urlError(`${cfg.apiUrl}${cfg.createPath}`, data, res);
+        }
     } catch (err) {
+        if (err.stage) throw err; // ya viene diagnosticado
+        // Una redireccion con maxRedirects:0 llega aqui como error.
+        if (err.response && err.response.status >= 300 && err.response.status < 400) {
+            const destino = err.response.headers?.location || '(sin Location)';
+            const e = new Error(
+                `El endpoint redirige (HTTP ${err.response.status}) hacia ${destino}. ` +
+                `Casi seguro ADDI_API_URL o ADDI_CREATE_PATH no son los del manual.`
+            );
+            e.stage = 'URL_API';
+            throw e;
+        }
         throw tag(err, 'CREATE');
     }
 
@@ -200,10 +249,14 @@ const createApplication = async ({ order, customer, redirectUrl, webhookUrl, ite
 const getApplicationStatus = async (applicationId) => {
     const cfg = config();
 
-    const { data } = await axios.get(`${cfg.apiUrl}/v1/applications/${applicationId}`, {
+    const url = `${cfg.apiUrl}${cfg.statusPath.replace('{id}', encodeURIComponent(applicationId))}`;
+
+    const { data } = await axios.get(url, {
         timeout: TIMEOUT_MS,
         headers: await authorizedHeaders(),
     });
+
+    if (looksLikeWebPage(data)) throw urlError(url, data);
 
     const rawStatus = data.status || data.applicationStatus || data.state;
 

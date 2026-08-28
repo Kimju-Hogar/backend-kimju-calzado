@@ -281,6 +281,9 @@ exports.createApplication = async (req, res) => {
         } else if (stage === 'AUTH') {
             reason = 'CREDENCIALES';
             pista = 'El financiador rechazo las credenciales. Suele ser el CLIENT_ID/CLIENT_SECRET mal copiado, o credenciales de un ambiente (pruebas/produccion) contra las URLs del otro.';
+        } else if (stage === 'URL_API') {
+            reason = 'URL_API';
+            pista = 'La URL configurada devolvio una pagina web en vez de JSON: no es el endpoint del API. Corrige ADDI_API_URL / ADDI_CREATE_PATH con lo que diga el manual de integracion.';
         } else if (stage === 'CONTRACT' || (stage === 'CREATE' && status && status >= 400 && status < 500)) {
             reason = 'CONTRATO';
             pista = 'El financiador rechazo los datos de la solicitud. El contrato del API no coincide con lo implementado: revisa el detalle de abajo para ver que campo reclama.';
@@ -308,7 +311,7 @@ exports.createApplication = async (req, res) => {
             // le falta o no le cuadra. Son mensajes de validacion de esquema, no
             // llevan credenciales ni datos del cliente, y sin ellos hay que ir a
             // buscar los logs del hosting para avanzar un paso.
-            ...(reason === 'CONTRATO' ? { detail } : {}),
+            ...(reason === 'CONTRATO' || reason === 'URL_API' ? { detail } : {}),
         });
     }
 };

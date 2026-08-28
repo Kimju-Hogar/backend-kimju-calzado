@@ -154,6 +154,45 @@ let avisos = 0;
         }
     }
 
+    // ── 6. El host del API responde JSON? ───────────────────────────────────
+    title('6. El API responde JSON, no una pagina web');
+
+    // Comprobacion aprendida a las malas: con ADDI_API_URL=https://api.addi.com
+    // la peticion devolvia 200 con el HTML de un sitio Next.js, y el error
+    // resultante parecia un problema del payload.
+    try {
+        const axios = require('axios');
+        const url = `${cfg.apiUrl}${cfg.createPath}`;
+        const r = await axios.post(url, {}, {
+            timeout: 15000,
+            validateStatus: () => true,
+            headers: { 'Content-Type': 'application/json' },
+        });
+
+        const cuerpo = typeof r.data === 'string' ? r.data : JSON.stringify(r.data);
+        const esWeb = /^\s*(<!DOCTYPE|<html)/i.test(cuerpo);
+
+        info(`POST ${url} -> HTTP ${r.status}`);
+
+        if (esWeb) {
+            bad('Devolvio una PAGINA WEB, no JSON. Esta URL no es el API de Addi.');
+            info('Corrige ADDI_API_URL y/o ADDI_CREATE_PATH con lo que diga el manual.');
+            info(`Recibido: ${cuerpo.slice(0, 90)}...`);
+            problemas += 1;
+        } else if (r.status === 401 || r.status === 403) {
+            ok('Responde JSON y pide autenticacion: es un endpoint de API real.');
+        } else if (r.status >= 400 && r.status < 500) {
+            ok('Responde JSON con un error de validacion: el endpoint existe.');
+            info(`Respuesta: ${cuerpo.slice(0, 200)}`);
+        } else {
+            warn(`Respuesta inesperada (HTTP ${r.status}): ${cuerpo.slice(0, 200)}`);
+            avisos += 1;
+        }
+    } catch (err) {
+        bad(`No se pudo consultar el endpoint: ${err.message}`);
+        problemas += 1;
+    }
+
     // ── Resumen ─────────────────────────────────────────────────────────────
     title('Resumen');
 
