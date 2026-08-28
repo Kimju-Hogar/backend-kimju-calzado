@@ -133,6 +133,27 @@ const urlError = (url, data, res) => {
     return err;
 };
 
+/**
+ * Identificador de la solicitud cuando Addi responde con una redireccion.
+ *
+ * En ese caso no hay cuerpo JSON del que sacarlo, asi que se busca por orden:
+ * una cabecera propia de Addi, el codigo corto de la URL
+ * (https://urlv2.addi.com/P5pwjc -> P5pwjc) y, como ultimo recurso, el orderId,
+ * que siempre conocemos y que Addi tambien recibe.
+ */
+const applicationIdFrom = (headers = {}, location = '', orderId = '') => {
+    const fromHeader =
+        headers['x-application-id'] ||
+        headers['application-id'] ||
+        headers['x-addi-application-id'];
+    if (fromHeader) return String(fromHeader);
+
+    const shortCode = String(location).split('/').filter(Boolean).pop();
+    if (shortCode && shortCode.length <= 40) return shortCode;
+
+    return String(orderId);
+};
+
 const authorizedHeaders = async () => ({
     Authorization: `Bearer ${await getAccessToken()}`,
     'Content-Type': 'application/json',
@@ -196,41 +217,60 @@ const createApplication = async ({ order, customer, redirectUrl, webhookUrl, ite
     };
 
     const headers = await authorizedHeaders(); // si falla aqui, va etiquetado AUTH
+    const url = `${cfg.apiUrl}${cfg.createPath}`;
 
-    let data;
+    let res;
     try {
-        const res = await axios.post(`${cfg.apiUrl}${cfg.createPath}`, payload, {
+        res = await axios.post(url, payload, {
             timeout: TIMEOUT_MS,
             headers,
-            // Sin seguir redirecciones: axios convierte el POST en GET al seguir
-            // un 302, y el resultado seria una pagina web con 200 que oculta el
-            // problema real. Mejor que falle diciendo a donde queria redirigir.
+            // No seguir la redireccion, por dos motivos.
+            //
+            // El primero es que esta integracion responde 301 con la URL de la
+            // solicitud en la cabecera Location: seguirla convierte el POST en
+            // GET y aterriza en la web de Addi, que devuelve 200 y una pagina
+            // HTML. Ese era el "error de contrato" que no habia forma de
+            // diagnosticar: la solicitud se creaba bien y se perdia la URL.
+            //
+            // El segundo es que una redireccion inesperada ahora se ve, en vez
+            // de disfrazarse de respuesta valida.
             maxRedirects: 0,
+            validateStatus: (s) => s >= 200 && s < 400,
         });
-        data = res.data;
-
-        if (looksLikeWebPage(data)) {
-            throw urlError(`${cfg.apiUrl}${cfg.createPath}`, data, res);
-        }
     } catch (err) {
-        if (err.stage) throw err; // ya viene diagnosticado
-        // Una redireccion con maxRedirects:0 llega aqui como error.
-        if (err.response && err.response.status >= 300 && err.response.status < 400) {
-            const destino = err.response.headers?.location || '(sin Location)';
-            const e = new Error(
-                `El endpoint redirige (HTTP ${err.response.status}) hacia ${destino}. ` +
-                `Casi seguro ADDI_API_URL o ADDI_CREATE_PATH no son los del manual.`
-            );
-            e.stage = 'URL_API';
-            throw e;
-        }
+        if (err.stage) throw err;
         throw tag(err, 'CREATE');
     }
 
-    const applicationId = data.applicationId || data.id || data.applicationID;
+    // Caso 1: 3xx con Location. La URL de la solicitud viene en la cabecera.
+    if (res.status >= 300 && res.status < 400) {
+        const location = res.headers?.location;
+        if (!location) {
+            const e = new Error(
+                `${url} respondio HTTP ${res.status} sin cabecera Location, ` +
+                `asi que no hay a donde enviar al cliente.`
+            );
+            e.stage = 'CONTRACT';
+            throw e;
+        }
+
+        return {
+            applicationId: applicationIdFrom(res.headers, location, payload.orderId),
+            applicationUrl: location,
+            raw: { status: res.status, location, headers: res.headers },
+        };
+    }
+
+    // Caso 2: 2xx con JSON, que es como responde la integracion estandar.
+    const data = res.data;
+
+    if (looksLikeWebPage(data)) throw urlError(url, data, res);
+
+    const applicationId =
+        data.applicationId || data.id || data.applicationID || payload.orderId;
     const applicationUrl = data.redirectionUrl || data.applicationUrl || data.url;
 
-    if (!applicationId || !applicationUrl) {
+    if (!applicationUrl) {
         throw tag(
             new Error(
                 `Respuesta inesperada de Addi al crear la solicitud: ${JSON.stringify(data).slice(0, 500)}`
@@ -246,17 +286,31 @@ const createApplication = async ({ order, customer, redirectUrl, webhookUrl, ite
  * Consulta el estado real de una solicitud contra la API de Addi.
  * Es la ÚNICA función autorizada para decidir si una orden quedó aprobada.
  */
-const getApplicationStatus = async (applicationId) => {
+const getApplicationStatus = async (applicationId, { orderId } = {}) => {
     const cfg = config();
 
-    const url = `${cfg.apiUrl}${cfg.statusPath.replace('{id}', encodeURIComponent(applicationId))}`;
+    const consultar = async (id) => {
+        const url = `${cfg.apiUrl}${cfg.statusPath.replace('{id}', encodeURIComponent(id))}`;
+        const r = await axios.get(url, { timeout: TIMEOUT_MS, headers: await authorizedHeaders() });
+        if (looksLikeWebPage(r.data)) throw urlError(url, r.data, r);
+        return r.data;
+    };
 
-    const { data } = await axios.get(url, {
-        timeout: TIMEOUT_MS,
-        headers: await authorizedHeaders(),
-    });
+    let data;
+    try {
+        data = await consultar(applicationId);
+    } catch (err) {
+        // Cuando la solicitud se creo por redireccion, el identificador guardado
+        // puede ser el codigo corto de la URL, que no sirve para consultar. El
+        // orderId si viaja en la solicitud, asi que se reintenta con el.
+        const noEncontrado = err.response?.status === 404 || err.response?.status === 400;
+        if (!noEncontrado || !orderId || orderId === applicationId) throw err;
 
-    if (looksLikeWebPage(data)) throw urlError(url, data);
+        console.warn(
+            `[Addi] Estado no encontrado por applicationId "${applicationId}". Reintentando por orderId.`
+        );
+        data = await consultar(orderId);
+    }
 
     const rawStatus = data.status || data.applicationStatus || data.state;
 

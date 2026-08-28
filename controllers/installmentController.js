@@ -351,7 +351,9 @@ const resolveOrderStatus = async (order) => {
         return { status: 'PENDING', order };
     }
 
-    const result = await service.getApplicationStatus(application.applicationId);
+    const result = await service.getApplicationStatus(application.applicationId, {
+        orderId: order._id.toString(),
+    });
 
     order.creditApplication.status = result.status;
     order.creditApplication.rawStatus = result.rawStatus;
