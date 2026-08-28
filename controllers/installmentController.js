@@ -50,6 +50,56 @@ const frontendUrl = () => (process.env.FRONTEND_URL || '').replace(/["']/g, '').
 const backendUrl = () =>
     (process.env.API_URL || process.env.BACKEND_URL || '').replace(/["']/g, '').replace(/\/+$/, '');
 
+/**
+ * Comprueba las credenciales con las que el financiador llama a nuestro webhook.
+ *
+ * Acepta HTTP Basic Auth (lo que usa Addi con sus "credenciales de notificacion")
+ * y, como alternativa, un secreto plano en cabecera para financiadores que
+ * trabajen asi.
+ *
+ * Si el comercio no configuro credenciales, no se bloquea la llamada: el estado
+ * se vuelve a consultar contra el API del financiador de todos modos, asi que un
+ * webhook falso no puede aprobar nada. Estas credenciales evitan el ruido, no
+ * son la barrera de seguridad.
+ */
+const verifyWebhookAuth = (providerCode, req) => {
+    const user = process.env[`${providerCode}_WEBHOOK_USER`];
+    const password = process.env[`${providerCode}_WEBHOOK_PASSWORD`];
+    const secret = process.env[`${providerCode}_WEBHOOK_SECRET`];
+
+    if (!user && !password && !secret) return true; // sin configurar: no se exige
+
+    const header = req.headers['authorization'] || '';
+
+    if (user && password) {
+        if (!header.toLowerCase().startsWith('basic ')) return false;
+        let decoded;
+        try {
+            decoded = Buffer.from(header.slice(6).trim(), 'base64').toString('utf8');
+        } catch {
+            return false;
+        }
+        // El usuario no lleva ':', asi que se parte en el primero.
+        const sep = decoded.indexOf(':');
+        if (sep === -1) return false;
+        return (
+            safeEqual(decoded.slice(0, sep), user) &&
+            safeEqual(decoded.slice(sep + 1), password)
+        );
+    }
+
+    const received = req.headers['x-webhook-secret'] || req.headers['x-addi-signature'] || header;
+    return Boolean(received) && safeEqual(String(received).trim(), secret);
+};
+
+/** Comparacion en tiempo constante, para no filtrar el secreto por temporizacion. */
+const safeEqual = (a, b) => {
+    const bufA = Buffer.from(String(a));
+    const bufB = Buffer.from(String(b));
+    if (bufA.length !== bufB.length) return false;
+    return crypto.timingSafeEqual(bufA, bufB);
+};
+
 const splitName = (fullName = '') => {
     const parts = String(fullName).trim().split(/\s+/).filter(Boolean);
     return {
@@ -372,17 +422,15 @@ exports.handleWebhook = async (req, res) => {
             return res.sendStatus(400);
         }
 
-        // Verificación opcional de secreto compartido, si el comercio lo configuró.
-        const expectedSecret = process.env[`${provider.code}_WEBHOOK_SECRET`];
-        if (expectedSecret) {
-            const received =
-                req.headers['x-webhook-secret'] ||
-                req.headers['x-addi-signature'] ||
-                req.headers['authorization'];
-            if (!received || !String(received).includes(expectedSecret)) {
-                console.error(`[Cuotas] Webhook de ${provider.code} con secreto inválido.`);
-                return res.sendStatus(401);
-            }
+        // Addi entrega unas "credenciales de notificacion" (usuario y contrasena)
+        // aparte de las de operacion, y llama a este webhook con HTTP Basic Auth.
+        //
+        // La version anterior buscaba la contrasena en texto plano dentro de la
+        // cabecera Authorization, cosa que nunca habria funcionado: Basic Auth la
+        // manda en base64. Habria rechazado todas las notificaciones legitimas.
+        if (!verifyWebhookAuth(provider.code, req)) {
+            console.error(`[Cuotas] Webhook de ${provider.code} con credenciales invalidas.`);
+            return res.sendStatus(401);
         }
 
         const applicationId = provider.service.extractApplicationIdFromWebhook(req.body);

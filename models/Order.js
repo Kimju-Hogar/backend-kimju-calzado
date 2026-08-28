@@ -35,6 +35,16 @@ const orderSchema = new mongoose.Schema({
     },
     // Codigo canonico del medio de pago. La lista vive en config/payments.js
     // y es la misma que usa el Panel de Contabilidad para agrupar reportes.
+    // Tienda que origino la orden ("Kimju Hogar" / "Kimju Calzado").
+    //
+    // Las dos tiendas comparten la misma base de datos y la misma cuenta de
+    // Addi, que solo admite una URL de notificacion. Es decir: el webhook de una
+    // orden de calzado puede llegarle al backend de hogar. Sin este campo, la
+    // venta se reportaria al Panel con el nombre del backend que la proceso, no
+    // con el de la tienda donde se compro.
+    store: {
+        type: String,
+    },
     paymentMethod: {
         type: String,
         required: true,

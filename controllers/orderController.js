@@ -2,6 +2,7 @@ const Order = require('../models/Order');
 const { sendTrackingEmail } = require('../utils/emailService');
 const { markOrderAsPaid } = require('../utils/orderFulfillment');
 const { normalizePaymentMethod, PAYMENT_METHODS } = require('../config/payments');
+const { storeName } = require('../services/panelSync');
 
 // @desc    Listar todas las ordenes
 // @route   GET /api/orders
@@ -46,6 +47,9 @@ exports.addOrderItems = async (req, res) => {
 
         const order = new Order({
             user: req.user.id,
+            // Queda grabado de que tienda salio, para que el reporte al Panel sea
+            // correcto aunque el webhook lo atienda el backend de la otra tienda.
+            store: storeName(),
             orderItems,
             shippingAddress: {
                 ...shippingAddress,

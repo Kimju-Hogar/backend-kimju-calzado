@@ -65,7 +65,9 @@ const syncSaleToPanel = async (order, { customerName, customerEmail } = {}) => {
                     name: customerName || order.shippingAddress?.fullName || 'Cliente Online',
                     email: customerEmail || order.shippingAddress?.email || '',
                 },
-                origin: storeName(),
+                // El de la orden manda: si el webhook lo atendio el backend de
+                // la otra tienda, storeName() seria el equivocado.
+                origin: order.store || storeName(),
             },
             {
                 timeout: TIMEOUT_MS,
@@ -77,7 +79,7 @@ const syncSaleToPanel = async (order, { customerName, customerEmail } = {}) => {
         await order.save();
 
         console.log(
-            `[PanelSync] Venta ${order._id} enviada al panel como "${getReportLabel(order.paymentMethod)}" (${storeName()}).`
+            `[PanelSync] Venta ${order._id} enviada al panel como "${getReportLabel(order.paymentMethod)}" (${order.store || storeName()}).`
         );
         return true;
     } catch (error) {
