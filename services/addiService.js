@@ -206,4 +206,8 @@ module.exports = {
     getApplicationStatus,
     extractApplicationIdFromWebhook,
     extractOrderIdFromWebhook,
+
+    // Solo para scripts/verificar-addi.js: permite comprobar credenciales y
+    // ambiente sin llegar a crear ninguna solicitud de credito.
+    __getAccessTokenForCheck: getAccessToken,
 };
