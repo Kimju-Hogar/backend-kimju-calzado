@@ -217,12 +217,43 @@ exports.createApplication = async (req, res) => {
             simulated,
         });
     } catch (error) {
+        // Se clasifica el fallo porque cada causa se arregla en un sitio
+        // distinto, y desde el navegador todas se veian igual: un 502 opaco.
+        const status = error.response?.status;
+        const stage = error.stage || 'DESCONOCIDO';
+
+        let reason = 'DESCONOCIDO';
+        let pista = '';
+
+        if (error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED') {
+            reason = 'RED';
+            pista = 'El servidor no logro salir a internet hacia el financiador. Revisa DNS o el cortafuegos de salida del hosting.';
+        } else if (stage === 'AUTH') {
+            reason = 'CREDENCIALES';
+            pista = 'El financiador rechazo las credenciales. Suele ser el CLIENT_ID/CLIENT_SECRET mal copiado, o credenciales de un ambiente (pruebas/produccion) contra las URLs del otro.';
+        } else if (stage === 'CONTRACT' || (stage === 'CREATE' && status && status >= 400 && status < 500)) {
+            reason = 'CONTRATO';
+            pista = 'El financiador rechazo los datos de la solicitud. El contrato del API no coincide con lo implementado: revisa el detalle de abajo para ver que campo reclama.';
+        } else if (status && status >= 500) {
+            reason = 'FINANCIADOR';
+            pista = 'El financiador respondio con un error propio. Suele ser temporal.';
+        }
+
         const detail = error.response?.data
-            ? JSON.stringify(error.response.data).slice(0, 500)
+            ? JSON.stringify(error.response.data).slice(0, 800)
             : error.message;
-        console.error('[Cuotas] Error creando la solicitud:', detail);
+
+        console.error(
+            `[Cuotas] Fallo creando la solicitud | proveedor=${req.params.provider} | causa=${reason} | paso=${stage} | http=${status || 'n/a'}`
+        );
+        console.error('[Cuotas] Respuesta del financiador:', detail);
+        if (pista) console.error('[Cuotas]', pista);
+
         res.status(502).json({
             msg: 'No pudimos iniciar tu solicitud de crédito. Intenta de nuevo o elige otro medio de pago.',
+            // Categoria, sin datos sensibles: permite diagnosticar desde la
+            // consola del navegador sin tener que entrar a los logs del hosting.
+            reason,
         });
     }
 };

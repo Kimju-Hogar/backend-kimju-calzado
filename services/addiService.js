@@ -60,6 +60,14 @@ const normalizeStatus = (rawStatus) => {
     return 'PENDING';
 };
 
+// Etiqueta el error con el paso en el que ocurrio. Sin esto, desde fuera es
+// imposible distinguir "las credenciales estan mal" de "el contrato del API no
+// coincide", que se arreglan de formas muy distintas.
+const tag = (err, stage) => {
+    if (!err.stage) err.stage = stage;
+    return err;
+};
+
 const getAccessToken = async () => {
     const cfg = config();
     const now = Date.now();
@@ -68,7 +76,9 @@ const getAccessToken = async () => {
         return tokenCache.value;
     }
 
-    const { data } = await axios.post(
+    let data;
+    try {
+        ({ data } = await axios.post(
         cfg.authUrl,
         {
             client_id: cfg.clientId,
@@ -77,11 +87,16 @@ const getAccessToken = async () => {
             grant_type: 'client_credentials',
         },
         { timeout: TIMEOUT_MS, headers: { 'Content-Type': 'application/json' } }
-    );
+        ));
+    } catch (err) {
+        throw tag(err, 'AUTH');
+    }
 
     const accessToken = data.access_token || data.accessToken;
     if (!accessToken) {
-        throw new Error('Addi no devolvió un access_token');
+        const err = new Error('Addi no devolvio un access_token');
+        err.stage = 'AUTH';
+        throw err;
     }
 
     const expiresInSeconds = Number(data.expires_in || 3600);
@@ -144,17 +159,27 @@ const createApplication = async ({ order, customer, redirectUrl, webhookUrl, ite
         },
     };
 
-    const { data } = await axios.post(`${cfg.apiUrl}/v1/online-applications`, payload, {
-        timeout: TIMEOUT_MS,
-        headers: await authorizedHeaders(),
-    });
+    const headers = await authorizedHeaders(); // si falla aqui, va etiquetado AUTH
+
+    let data;
+    try {
+        ({ data } = await axios.post(`${cfg.apiUrl}/v1/online-applications`, payload, {
+            timeout: TIMEOUT_MS,
+            headers,
+        }));
+    } catch (err) {
+        throw tag(err, 'CREATE');
+    }
 
     const applicationId = data.applicationId || data.id || data.applicationID;
     const applicationUrl = data.redirectionUrl || data.applicationUrl || data.url;
 
     if (!applicationId || !applicationUrl) {
-        throw new Error(
-            `Respuesta inesperada de Addi al crear la solicitud: ${JSON.stringify(data).slice(0, 500)}`
+        throw tag(
+            new Error(
+                `Respuesta inesperada de Addi al crear la solicitud: ${JSON.stringify(data).slice(0, 500)}`
+            ),
+            'CONTRACT'
         );
     }
 
