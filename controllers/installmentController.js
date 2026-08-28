@@ -304,6 +304,11 @@ exports.createApplication = async (req, res) => {
             // Categoria, sin datos sensibles: permite diagnosticar desde la
             // consola del navegador sin tener que entrar a los logs del hosting.
             reason,
+            // Solo en errores de contrato: el financiador esta diciendo que campo
+            // le falta o no le cuadra. Son mensajes de validacion de esquema, no
+            // llevan credenciales ni datos del cliente, y sin ellos hay que ir a
+            // buscar los logs del hosting para avanzar un paso.
+            ...(reason === 'CONTRATO' ? { detail } : {}),
         });
     }
 };

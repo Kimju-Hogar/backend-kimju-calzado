@@ -116,12 +116,20 @@ const authorizedHeaders = async () => ({
 const createApplication = async ({ order, customer, redirectUrl, webhookUrl, items }) => {
     const cfg = config();
 
+    // Addi espera los datos de la persona dentro de la direccion, no solo las
+    // lineas. Enviar solo line1/city/state es lo que hace que rechace la
+    // solicitud por esquema.
     const address = {
+        firstName: customer.firstName,
+        lastName: customer.lastName,
+        email: customer.email,
+        cellphone: customer.phone,
         line1: order.shippingAddress?.address || '',
         line2: order.shippingAddress?.additionalInfo || '',
         city: order.shippingAddress?.city || '',
         state: order.shippingAddress?.state || '',
         country: 'CO',
+        zipCode: order.shippingAddress?.postalCode || '000000',
     };
 
     const payload = {
@@ -129,6 +137,7 @@ const createApplication = async ({ order, customer, redirectUrl, webhookUrl, ite
         totalAmount: Math.round(Number(order.totalPrice)),
         shippingAmount: Math.round(Number(order.shippingPrice || 0)),
         totalTaxesAmount: Math.round(Number(order.taxPrice || 0)),
+        totalDiscountAmount: 0,
         currency: 'COP',
         ...(cfg.allySlug ? { allySlug: cfg.allySlug } : {}),
         items: items.map((item) => ({
@@ -151,11 +160,9 @@ const createApplication = async ({ order, customer, redirectUrl, webhookUrl, ite
         shippingAddress: address,
         billingAddress: address,
         allyUrlRedirection: {
-            logoUrl: process.env.STORE_LOGO_URL || undefined,
+            ...(process.env.STORE_LOGO_URL ? { logoUrl: process.env.STORE_LOGO_URL } : {}),
             callbackUrl: webhookUrl,
             redirectionUrl: redirectUrl,
-            approvedUrl: redirectUrl,
-            rejectedUrl: redirectUrl,
         },
     };
 
