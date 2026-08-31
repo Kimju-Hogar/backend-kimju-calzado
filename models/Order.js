@@ -45,6 +45,14 @@ const orderSchema = new mongoose.Schema({
     store: {
         type: String,
     },
+    // Recargo aplicado por el medio de pago elegido. Se guarda desglosado para
+    // que la factura y el Panel puedan mostrar cuanto fue precio y cuanto
+    // recargo, en vez de un total sin explicacion.
+    surcharge: {
+        percentage: { type: Number, default: 0 },
+        amount: { type: Number, default: 0 },
+        baseAmount: { type: Number, default: 0 },
+    },
     paymentMethod: {
         type: String,
         required: true,

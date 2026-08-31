@@ -1,7 +1,7 @@
 const Order = require('../models/Order');
 const { sendTrackingEmail } = require('../utils/emailService');
 const { markOrderAsPaid } = require('../utils/orderFulfillment');
-const { normalizePaymentMethod, PAYMENT_METHODS } = require('../config/payments');
+const { normalizePaymentMethod, PAYMENT_METHODS, applySurcharge } = require('../config/payments');
 const { storeName } = require('../services/panelSync');
 
 // @desc    Listar todas las ordenes
@@ -45,6 +45,19 @@ exports.addOrderItems = async (req, res) => {
             });
         }
 
+        // El recargo lo calcula el servidor, nunca el navegador: si viniera del
+        // cliente bastaria con editar la peticion para no pagarlo.
+        const baseAmount =
+            Number(itemsPrice || 0) + Number(shippingPrice || 0) + Number(taxPrice || 0);
+        const surcharge = applySurcharge(baseAmount, method);
+
+        if (surcharge.amount > 0) {
+            console.log(
+                `[Orden] Recargo ${surcharge.percentage}% por ${method}: ` +
+                `${surcharge.base} -> ${surcharge.total}`
+            );
+        }
+
         const order = new Order({
             user: req.user.id,
             // Queda grabado de que tienda salio, para que el reporte al Panel sea
@@ -59,7 +72,13 @@ exports.addOrderItems = async (req, res) => {
             itemsPrice,
             taxPrice,
             shippingPrice,
-            totalPrice,
+            // El total lo fija el servidor a partir de la base y el recargo.
+            totalPrice: surcharge.total,
+            surcharge: {
+                percentage: surcharge.percentage,
+                amount: surcharge.amount,
+                baseAmount: surcharge.base,
+            },
         });
 
         const createdOrder = await order.save();

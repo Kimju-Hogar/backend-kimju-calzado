@@ -70,7 +70,42 @@ const getReportLabel = (code) => {
     return normalized ? PAYMENT_METHODS[normalized].reportLabel : 'Otros';
 };
 
+/**
+ * Recargo que se suma al precio cuando el cliente paga con este medio.
+ *
+ * Se lee del entorno (ADDI_SURCHARGE_PERCENT, SISTECREDITO_SURCHARGE_PERCENT)
+ * y por defecto es 0: ningun medio recarga nada salvo que se configure.
+ */
+const surchargePercent = (code) => {
+    const normalized = normalizePaymentMethod(code);
+    if (!normalized) return 0;
+    const value = Number(process.env[`${normalized}_SURCHARGE_PERCENT`]);
+    return Number.isFinite(value) && value > 0 ? value : 0;
+};
+
+/**
+ * Aplica el recargo sobre un importe base.
+ *
+ * Ojo con la aritmetica: sumar un 9% NO compensa una comision del 9%, porque la
+ * comision se calcula sobre el total ya recargado. Con base 100 -> total 109 ->
+ * comision 9,81 -> quedan 99,19. Para recibir exactamente el precio base hace
+ * falta 100/(1-0,09) = +9,89%. El porcentaje es configurable justo por esto.
+ */
+const applySurcharge = (baseAmount, code) => {
+    const base = Math.max(0, Math.round(Number(baseAmount) || 0));
+    const percentage = surchargePercent(code);
+
+    if (percentage <= 0) {
+        return { base, percentage: 0, amount: 0, total: base };
+    }
+
+    const amount = Math.round((base * percentage) / 100);
+    return { base, percentage, amount, total: base + amount };
+};
+
 module.exports = {
+    surchargePercent,
+    applySurcharge,
     PAYMENT_METHODS,
     PAYMENT_METHOD_CODES,
     INSTALLMENT_METHOD_CODES,

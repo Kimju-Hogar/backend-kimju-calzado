@@ -24,7 +24,7 @@ const User = require('../models/User');
 const addiService = require('../services/addiService');
 const sistecreditoService = require('../services/sistecreditoService');
 const { markOrderAsPaid } = require('../utils/orderFulfillment');
-const { PAYMENT_METHODS, normalizePaymentMethod } = require('../config/payments');
+const { PAYMENT_METHODS, normalizePaymentMethod, surchargePercent } = require('../config/payments');
 
 const PROVIDERS = {
     ADDI: addiService,
@@ -121,17 +121,20 @@ exports.getAvailableMethods = (req, res) => {
     const methods = [
         {
             ...PAYMENT_METHODS.WOMPI,
+            surchargePercent: surchargePercent('WOMPI'),
             available: Boolean(process.env.WOMPI_PUBLIC_KEY && process.env.WOMPI_INTEGRITY_SECRET),
         },
         {
             ...PAYMENT_METHODS.ADDI,
             ...addiService.publicConfig(),
+            surchargePercent: surchargePercent('ADDI'),
             available: addiService.isConfigured() || simulator,
             simulated: !addiService.isConfigured() && simulator,
         },
         {
             ...PAYMENT_METHODS.SISTECREDITO,
             ...sistecreditoService.publicConfig(),
+            surchargePercent: surchargePercent('SISTECREDITO'),
             available: sistecreditoService.isConfigured() || simulator,
             simulated: !sistecreditoService.isConfigured() && simulator,
         },
