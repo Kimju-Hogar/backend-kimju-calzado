@@ -5,6 +5,12 @@ const dotenv = require('dotenv');
 
 dotenv.config();
 
+// Comprueba la configuracion ANTES de intentar conectar a la base de datos.
+// Sin esto, unas variables ausentes producian un error de Mongoose sin contexto
+// y un bucle de reinicios que dejaba toda la API en 503.
+const { verificarEntorno } = require('./config/verificarEntorno');
+verificarEntorno();
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
