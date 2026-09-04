@@ -45,10 +45,26 @@ const syncSaleToPanel = async (order, { customerName, customerEmail } = {}) => {
         const products = [];
         for (const item of order.orderItems) {
             const productDoc = await Product.findById(item.product);
+
+            // La orden guarda una sola cadena para la variacion, sin decir si es
+            // talla o color. Se decide mirando las listas del producto, que es
+            // como tambien lo resuelve decreaseStock().
+            const variacion = item.selectedVariation;
+            const esColor =
+                Boolean(variacion) &&
+                (productDoc?.colors || []).some((c) => c.color === variacion);
+            const esTalla =
+                Boolean(variacion) &&
+                (productDoc?.sizes || []).some((s) => s.size === variacion);
+
             products.push({
                 sku: productDoc?.sku || productDoc?.name || item.name,
                 quantity: item.quantity,
                 price: item.price,
+                // Si no se reconoce en ninguna lista se manda como color, que es
+                // donde el Panel la muestra: es preferible a perder el dato.
+                ...(esTalla ? { selectedSize: variacion } : {}),
+                ...(esColor || (variacion && !esTalla) ? { selectedColor: variacion } : {}),
             });
         }
 

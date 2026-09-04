@@ -133,13 +133,24 @@ const urlError = (url, data, res) => {
     return err;
 };
 
+// Un UUID como el que Addi usa de identificador de solicitud.
+const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
 /**
  * Identificador de la solicitud cuando Addi responde con una redireccion.
  *
- * En ese caso no hay cuerpo JSON del que sacarlo, asi que se busca por orden:
- * una cabecera propia de Addi, el codigo corto de la URL
- * (https://urlv2.addi.com/P5pwjc -> P5pwjc) y, como ultimo recurso, el orderId,
- * que siempre conocemos y que Addi tambien recibe.
+ * La URL de retorno tiene dos formas segun el flujo:
+ *
+ *   https://urlv2.addi.com/P5pwjc                      (enlace corto)
+ *   https://login.addi.com/token?redirect_url=https://originations.addi.com/applications/<UUID>&access_token=...
+ *
+ * En la segunda el identificador real es ese UUID, escondido dentro de un
+ * parametro. Buscarlo con una expresion regular cubre las dos formas y las que
+ * puedan venir, sin depender de la estructura exacta de la URL.
+ *
+ * El orderId queda como ultimo recurso, pero Addi NO lo reconoce como
+ * identificador de solicitud: si se llega ahi, la consulta de estado va a
+ * fallar y hay que revisar por que no vino el UUID.
  */
 const applicationIdFrom = (headers = {}, location = '', orderId = '') => {
     const fromHeader =
@@ -148,9 +159,22 @@ const applicationIdFrom = (headers = {}, location = '', orderId = '') => {
         headers['x-addi-application-id'];
     if (fromHeader) return String(fromHeader);
 
-    const shortCode = String(location).split('/').filter(Boolean).pop();
-    if (shortCode && shortCode.length <= 40) return shortCode;
+    const uuid = String(location).match(UUID_RE);
+    if (uuid) return uuid[0];
 
+    // Enlace corto: ultimo segmento de la ruta, ignorando la query.
+    try {
+        const parsed = new URL(String(location));
+        const shortCode = parsed.pathname.split('/').filter(Boolean).pop();
+        if (shortCode && shortCode.length <= 40) return shortCode;
+    } catch {
+        // location no era una URL absoluta; se sigue al ultimo recurso.
+    }
+
+    console.warn(
+        `[Addi] No se pudo extraer el applicationId de "${String(location).slice(0, 120)}". ` +
+        `Se usa el orderId, y la consulta de estado probablemente falle.`
+    );
     return String(orderId);
 };
 

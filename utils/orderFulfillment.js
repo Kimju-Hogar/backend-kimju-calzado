@@ -12,6 +12,7 @@ const Product = require('../models/Product');
 const User = require('../models/User');
 const { sendOrderEmail, sendAdminNewOrderEmail } = require('./emailService');
 const { syncSaleToPanel } = require('../services/panelSync');
+const { notifyNewOrder } = require('../services/whatsappNotifier');
 const { normalizePaymentMethod } = require('../config/payments');
 
 /** Descuenta stock global y el de la variación (talla o color) si aplica. */
@@ -111,6 +112,10 @@ const markOrderAsPaid = async (order, { method, transactionId, rawStatus, custom
         customerName: user?.name,
         customerEmail: user?.email || customerEmail,
     });
+
+    // Aviso por WhatsApp. Va al final y no se espera su resultado para nada
+    // critico: si el servicio esta caido, la venta ya quedo confirmada igual.
+    await notifyNewOrder(order, { store: order.store });
 
     console.log(`[Fulfillment] Orden ${order._id} completada con ${normalizedMethod}.`);
     return order;
