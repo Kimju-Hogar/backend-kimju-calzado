@@ -1,5 +1,23 @@
-const PDFDocument = require('pdfkit');
 const Order = require('../models/Order');
+
+/**
+ * Carga pdfkit en el momento de usarlo, no al arrancar.
+ *
+ * Tenerlo arriba hacia que una dependencia ausente matara el proceso entero:
+ * como este archivo se carga desde orderRoutes, la API completa respondia 503
+ * por no poder generar un PDF que casi nadie estaba pidiendo.
+ */
+const cargarPDFKit = () => {
+    try {
+        return require('pdfkit');
+    } catch (error) {
+        console.error(
+            '[Factura] pdfkit no esta instalado. Ejecuta "npm install" en el servidor. ' +
+            'El resto de la tienda funciona con normalidad.'
+        );
+        return null;
+    }
+};
 
 // @desc    Get order invoice PDF
 // @route   GET /api/orders/:id/invoice
@@ -15,6 +33,13 @@ exports.getInvoice = async (req, res) => {
         // Security check: only admin or the order owner can download
         if (req.user.role !== 'admin' && order.user._id.toString() !== req.user.id) {
             return res.status(401).json({ message: 'Not authorized' });
+        }
+
+        const PDFDocument = cargarPDFKit();
+        if (!PDFDocument) {
+            return res.status(503).json({
+                message: 'La descarga de facturas no esta disponible en este momento.',
+            });
         }
 
         const doc = new PDFDocument({ margin: 50 });
