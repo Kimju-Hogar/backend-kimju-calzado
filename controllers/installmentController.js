@@ -225,6 +225,38 @@ exports.createApplication = async (req, res) => {
             });
         }
 
+        // El recargo por pagar a cuotas, como una linea mas.
+        //
+        // Sin esto los items sumaban el precio base mientras totalAmount llevaba
+        // el recargo: el financiador arma su pantalla con los items, asi que el
+        // cliente veia el precio sin recargar y el descuadre podia hacer que
+        // rechazaran la solicitud.
+        const recargo = Math.round(Number(order.surcharge?.amount) || 0);
+        if (recargo > 0) {
+            const sumaItems = items.reduce((t, i) => t + Math.round(i.price) * i.quantity, 0);
+            const otros = Math.round(order.shippingPrice || 0) + Math.round(order.taxPrice || 0);
+
+            // El importe de la linea se calcula por diferencia, no copiando
+            // surcharge.amount: asi absorbe cualquier resto de redondeo y la suma
+            // cuadra exactamente con totalAmount.
+            const ajuste = Math.round(order.totalPrice) - sumaItems - otros;
+
+            if (ajuste > 0) {
+                items.push({
+                    sku: `RECARGO-${provider.code}`,
+                    name: `Recargo por pago a cuotas (${order.surcharge.percentage}%)`,
+                    quantity: 1,
+                    price: ajuste,
+                    category: 'servicio',
+                });
+            } else if (ajuste !== 0) {
+                console.warn(
+                    `[Cuotas] Descuadre inesperado en la orden ${order._id}: ` +
+                    `items ${sumaItems} + otros ${otros} vs total ${order.totalPrice}`
+                );
+            }
+        }
+
         const redirectUrl = `${frontendUrl()}/order/${order._id}/credit-result?provider=${provider.code}`;
         const webhookUrl = `${backendUrl()}/api/payments/credit/${provider.code.toLowerCase()}/webhook`;
 
