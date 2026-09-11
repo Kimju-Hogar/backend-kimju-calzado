@@ -415,6 +415,115 @@ const resolveOrderStatus = async (order) => {
  * Recibe únicamente el orderId. El applicationId y el estado salen de la base de
  * datos y del financiador, nunca del cliente.
  */
+/**
+ * @desc    Revisa las solicitudes pendientes y confirma las aprobadas
+ * @route   POST /api/payments/credit/reconcile
+ * @access  Secreto compartido (cabecera x-sync-secret)
+ *
+ * Es la red de seguridad de todo el flujo a cuotas: da igual que el cliente no
+ * haya vuelto o que el webhook no haya llegado, aqui se le pregunta al
+ * financiador por cada solicitud pendiente.
+ *
+ * Parametros opcionales (query):
+ *   limit   cuantas ordenes revisar en esta llamada (por defecto 8)
+ *   dias    cuantos dias hacia atras mirar (por defecto 30)
+ *   dryRun  "true" para informar sin modificar nada
+ */
+exports.reconcilePending = async (req, res) => {
+    const secreto = process.env.SYNC_SECRET;
+    if (!secreto || req.headers['x-sync-secret'] !== secreto) {
+        return res.status(401).json({ msg: 'No autorizado' });
+    }
+
+    const limit = Math.min(Math.max(Number(req.query.limit) || 8, 1), 25);
+    const dias = Math.min(Math.max(Number(req.query.dias) || 30, 1), 365);
+    const dryRun = String(req.query.dryRun || '').toLowerCase() === 'true';
+
+    const desde = new Date(Date.now() - dias * 24 * 60 * 60 * 1000);
+
+    try {
+        const pendientes = await Order.find({
+            isPaid: false,
+            'creditApplication.provider': { $exists: true },
+            'creditApplication.status': { $in: ['PENDING', 'CREATED', null] },
+            createdAt: { $gte: desde },
+        })
+            .sort({ createdAt: -1 })
+            .limit(limit);
+
+        const resultados = [];
+        let aprobadas = 0;
+        let rechazadas = 0;
+        let siguenPendientes = 0;
+        let errores = 0;
+
+        for (const order of pendientes) {
+            const etiqueta = {
+                orderId: order._id.toString(),
+                proveedor: order.creditApplication?.provider,
+                total: order.totalPrice,
+                cliente: order.shippingAddress?.fullName || null,
+            };
+
+            try {
+                if (dryRun) {
+                    resultados.push({ ...etiqueta, resultado: 'simulacion, no se consulto' });
+                    continue;
+                }
+
+                const antes = order.isPaid;
+                const { status } = await resolveOrderStatus(order);
+
+                if (status === 'APPROVED') aprobadas += 1;
+                else if (['REJECTED', 'CANCELLED', 'EXPIRED'].includes(status)) rechazadas += 1;
+                else siguenPendientes += 1;
+
+                resultados.push({
+                    ...etiqueta,
+                    estado: status,
+                    confirmadaAhora: !antes && order.isPaid,
+                });
+            } catch (error) {
+                errores += 1;
+                resultados.push({
+                    ...etiqueta,
+                    error: error.response?.data
+                        ? JSON.stringify(error.response.data).slice(0, 200)
+                        : error.message,
+                });
+            }
+        }
+
+        // Cuantas quedan sin revisar, para saber si hay que volver a llamar.
+        const totalPendientes = await Order.countDocuments({
+            isPaid: false,
+            'creditApplication.provider': { $exists: true },
+            'creditApplication.status': { $in: ['PENDING', 'CREATED', null] },
+            createdAt: { $gte: desde },
+        });
+
+        console.log(
+            `[Conciliacion] revisadas=${pendientes.length} aprobadas=${aprobadas} ` +
+            `rechazadas=${rechazadas} pendientes=${siguenPendientes} errores=${errores} ` +
+            `quedan=${totalPendientes}`
+        );
+
+        res.json({
+            revisadas: pendientes.length,
+            aprobadas,
+            rechazadas,
+            siguenPendientes,
+            errores,
+            quedanPorRevisar: totalPendientes,
+            dryRun,
+            detalle: resultados,
+        });
+    } catch (error) {
+        console.error('[Conciliacion] Error:', error.message);
+        res.status(500).json({ msg: 'Error durante la conciliacion', error: error.message });
+    }
+};
+
 exports.verifyApplication = async (req, res) => {
     try {
         const orderId = req.body.orderId || req.params.orderId;

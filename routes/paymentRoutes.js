@@ -42,6 +42,11 @@ router.post('/credit/:provider/create', auth, installmentController.createApplic
 // @access  Privado
 router.post('/credit/verify', auth, installmentController.verifyApplication);
 
+// @desc    Conciliar solicitudes pendientes (red de seguridad)
+// @route   POST /api/payments/credit/reconcile
+// @access  Secreto compartido
+router.post('/credit/reconcile', installmentController.reconcilePending);
+
 // @desc    Decisión manual del simulador (solo fuera de producción)
 // @route   POST /api/payments/credit/simulator/decide
 // @access  Privado

@@ -116,8 +116,14 @@ const sendOrderEmail = async (order, user) => {
 
 const sendAdminNewOrderEmail = async (order, user) => {
     try {
-        const adminEmail = 'kimjuhogar@gmail.com';
-        console.log(`[EMAIL] Sending Admin Notification to ${adminEmail}`);
+        // Destinatario configurable: ADMIN_EMAIL admite varias direcciones
+        // separadas por coma. Si no esta, cae a la cuenta remitente.
+        const adminEmail = (process.env.ADMIN_EMAIL || process.env.EMAIL_USER || '').trim();
+        if (!adminEmail) {
+            console.error('[EMAIL] No hay destinatario para el aviso de venta (ADMIN_EMAIL / EMAIL_USER).');
+            return false;
+        }
+        console.log(`[EMAIL] Enviando aviso de venta a ${adminEmail}`);
 
         const itemsHtml = `
             <div class="items-box">

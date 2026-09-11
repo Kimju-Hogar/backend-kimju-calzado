@@ -105,7 +105,16 @@ const markOrderAsPaid = async (order, { method, transactionId, rawStatus, custom
             console.warn(`[Fulfillment] Sin destinatario de correo para la orden ${order._id}`);
         }
     } catch (error) {
-        console.error('[Fulfillment] Error enviando correos (no crítico):', error.message);
+        // No tumba la venta, pero tiene que verse: si el correo es el canal por
+        // el que te enteras de las ventas, un fallo callado es peor que ninguno.
+        console.error('='.repeat(64));
+        console.error(`[Fulfillment] LA ORDEN ${order._id} SE CONFIRMO PERO NO SE PUDO AVISAR POR CORREO`);
+        console.error(`[Fulfillment] Motivo: ${error.message}`);
+        if (/Invalid login|BadCredentials|535/i.test(error.message || '')) {
+            console.error('[Fulfillment] La contrasena de aplicacion del correo no es valida.');
+            console.error('[Fulfillment] Genera una nueva en la cuenta de Google y actualiza EMAIL_PASS.');
+        }
+        console.error('='.repeat(64));
     }
 
     await syncSaleToPanel(order, {
