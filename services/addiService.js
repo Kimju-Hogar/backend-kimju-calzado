@@ -31,7 +31,12 @@ const config = () => ({
         .replace(/\/+$/, ''),
     allySlug: (process.env.ADDI_ALLY_SLUG || '').trim(),
     createPath: (process.env.ADDI_CREATE_PATH || '/v1/online-applications').trim(),
-    statusPath: (process.env.ADDI_STATUS_PATH || '/v1/applications/{id}').trim(),
+    // El valor por defecto tenia que apuntar al mismo recurso que crea
+    // createPath ("online-applications"), no a "applications": por eso la
+    // conciliacion devolvia 404 en el 100% de las ordenes, sin importar su
+    // antiguedad. Si Addi confirma otra ruta, se sobreescribe con la variable
+    // de entorno sin tocar codigo.
+    statusPath: (process.env.ADDI_STATUS_PATH || '/v1/online-applications/{id}').trim(),
     minAmount: Number(process.env.ADDI_MIN_AMOUNT || 150000),
     maxAmount: Number(process.env.ADDI_MAX_AMOUNT || 6000000),
 });
