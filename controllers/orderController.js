@@ -9,7 +9,7 @@ const { storeName } = require('../services/panelSync');
 // @access  Privado/Admin
 exports.getOrders = async (req, res) => {
     try {
-        const orders = await Order.find({}).populate('user', 'id name email');
+        const orders = await Order.find({}).populate('user', 'id name email').sort({ createdAt: -1 });
         res.json(orders);
     } catch (err) {
         res.status(500).json({ message: err.message });
