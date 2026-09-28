@@ -9,8 +9,13 @@
  *
  * Reglas que este controlador respeta sin excepción:
  *
- *   1. El estado SIEMPRE se consulta contra la API del financiador. Ni la URL
- *      de retorno ni el cuerpo del webhook pueden aprobar nada por sí solos.
+ *   1. Ni la URL de retorno ni el cuerpo del webhook pueden aprobar nada sin
+ *      pasar por una barrera de confianza real. Para Sistecrédito esa barrera
+ *      es volver a consultar su API. Para Addi, cuya cuenta NO tiene endpoint
+ *      de consulta (confirmado contra su documentación oficial y con pruebas
+ *      directas: services/addiService.js), la barrera es el Basic Auth del
+ *      webhook con las credenciales de notificación — ver
+ *      applyAddiWebhookStatus más abajo.
  *   2. El applicationId se lee de la base de datos, nunca del cliente.
  *   3. Si el proveedor no está completamente configurado, la ruta responde 503
  *      y el botón ni siquiera se muestra en el checkout.
@@ -386,6 +391,16 @@ const resolveOrderStatus = async (order) => {
         return { status: 'PENDING', order };
     }
 
+    // Addi no tiene endpoint de consulta (confirmado con su documentacion
+    // oficial de integracion "online application"): el estado SOLO llega por
+    // webhook, antes de que el cliente vuelva a la tienda. No hay nada que
+    // "volver a preguntar" aqui; devolver lo que ya se guardo (el webhook, si
+    // llego, ya lo actualizo en applyAddiWebhookStatus). Intentar una consulta
+    // GET contra Addi para este proveedor siempre da 404.
+    if (application.provider === 'ADDI') {
+        return { status: application.status || 'PENDING', order };
+    }
+
     const result = await service.getApplicationStatus(application.applicationId, {
         orderId: order._id.toString(),
     });
@@ -560,14 +575,56 @@ exports.verifyApplication = async (req, res) => {
 // ── 3. Webhook ───────────────────────────────────────────────────────────────
 
 /**
+ * Aplica el estado que trae el webhook de Addi directamente.
+ *
+ * Segun la documentacion oficial de integracion de Addi ("online application
+ * callback"), esta cuenta NO tiene un endpoint de consulta: el webhook es la
+ * UNICA fuente de estado, no un simple aviso de "algo cambio". Confirmado
+ * ademas por pruebas directas contra su API (services/addiService.js): las
+ * rutas de consulta devuelven 404 en el 100% de los casos, siempre, sin
+ * importar el applicationId.
+ *
+ * La barrera de confianza aqui es el Basic Auth del webhook (verifyWebhookAuth,
+ * ya comprobado antes de llegar a esta funcion) con las credenciales de
+ * notificacion que entrega el portal de aliados de Addi.
+ */
+const applyAddiWebhookStatus = async (order, body) => {
+    const rawStatus =
+        body?.status || body?.applicationStatus || body?.state ||
+        body?.data?.status || body?.application?.status;
+    const status = addiService.normalizeStatus(rawStatus);
+
+    order.creditApplication.status = status;
+    order.creditApplication.rawStatus = String(rawStatus || 'UNKNOWN');
+    order.creditApplication.updatedAt = new Date();
+    await order.save();
+
+    if (status === 'APPROVED') {
+        await markOrderAsPaid(order, {
+            method: 'ADDI',
+            transactionId: order.creditApplication.applicationId,
+            rawStatus: order.creditApplication.rawStatus,
+            customerEmail: order.shippingAddress?.email,
+        });
+    }
+
+    return status;
+};
+
+/**
  * @desc    Notificación del financiador
  * @route   POST /api/payments/credit/:provider/webhook
  * @access  Público
  *
- * El webhook se trata como un simple aviso de "algo cambió": nunca se lee el
- * estado que trae. Se ubica la orden y se vuelve a consultar la API oficial.
- * Así, aunque la firma del webhook cambie o alguien lo falsifique, no se puede
- * aprobar una orden que el financiador no aprobó.
+ * Para Sistecrédito, el webhook sigue siendo solo un aviso: se vuelve a
+ * consultar su API oficial (resolveOrderStatus), asi que una notificacion
+ * falsa ahi no puede aprobar nada por si sola.
+ *
+ * Para Addi es distinto (ver applyAddiWebhookStatus arriba): no hay API de
+ * consulta que volver a llamar, asi que el estado del webhook, ya autenticado
+ * por Basic Auth, se aplica directo. Addi ademas EXIGE que se responda 200 con
+ * el mismo cuerpo (body) que envio, o lo marca como fallido y reintenta cada
+ * 30 minutos durante 24 horas.
  */
 exports.handleWebhook = async (req, res) => {
     try {
@@ -600,7 +657,19 @@ exports.handleWebhook = async (req, res) => {
 
         if (!order) {
             console.warn(`[Cuotas] Webhook de ${provider.code} sin orden asociada.`);
+            // Addi exige el mismo body de vuelta tambien en este caso; sin
+            // orden que actualizar no hay nada mas que hacer, pero si no se
+            // le da el formato que espera, reintenta durante 24 horas.
+            if (provider.code === 'ADDI') return res.status(200).json(req.body);
             return res.sendStatus(200); // 200 para que el financiador no reintente en bucle
+        }
+
+        if (provider.code === 'ADDI') {
+            const status = await applyAddiWebhookStatus(order, req.body);
+            console.log(`[Cuotas] Webhook ADDI: orden ${order._id} quedó en ${status}.`);
+            // Addi solo da la notificacion por entregada si el body de vuelta
+            // es identico, byte a byte, al que mando.
+            return res.status(200).json(req.body);
         }
 
         const { status } = await resolveOrderStatus(order);
