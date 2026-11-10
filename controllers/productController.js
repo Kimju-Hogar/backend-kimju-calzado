@@ -37,6 +37,16 @@ const transformProduct = (product) => {
     };
 };
 
+// Un producto con tallas o colores solo se puede comprar si alguna variante
+// tiene unidades. El stock global puede quedar en positivo mientras todas las
+// tallas estan en 0 (el Panel guarda los dos por separado), y eso hacia que
+// el producto apareciera en la tienda sin ninguna opcion disponible.
+const hasPurchasableStock = (p) => {
+    if (Array.isArray(p.sizes) && p.sizes.length > 0) return p.sizes.some((s) => Number(s.stock) > 0);
+    if (Array.isArray(p.colors) && p.colors.length > 0) return p.colors.some((c) => Number(c.stock) > 0);
+    return Number(p.stock) > 0;
+};
+
 // @desc    Get all products (filtered by type from env)
 // @route   GET /api/products
 // @access  Public
@@ -44,8 +54,9 @@ exports.getProducts = async (req, res) => {
     try {
         const { category, search, includeOutOfStock } = req.query;
         let query = { type: PRODUCT_TYPE, status: 'active' };
+        const soloDisponibles = includeOutOfStock !== 'true';
 
-        if (includeOutOfStock !== 'true') {
+        if (soloDisponibles) {
             query.stock = { $gt: 0 };
         }
 
@@ -57,7 +68,8 @@ exports.getProducts = async (req, res) => {
             query.name = { $regex: search, $options: 'i' };
         }
 
-        const products = await Product.find(query).sort({ createdAt: -1 });
+        let products = await Product.find(query).sort({ createdAt: -1 });
+        if (soloDisponibles) products = products.filter(hasPurchasableStock);
         res.json(products.map(transformProduct));
     } catch (err) {
         console.error(err.message);
@@ -175,17 +187,20 @@ exports.getSimilarProducts = async (req, res) => {
             return res.status(404).json({ message: 'Product not found' });
         }
 
+        // Se piden mas de los 4 que se muestran porque despues se descartan
+        // los que no tienen ninguna talla/color disponible.
         const similarProducts = await Product.find({
             _id: { $ne: product._id },
             type: PRODUCT_TYPE,
             status: 'active',
+            stock: { $gt: 0 },
             $or: [
                 { category: product.category },
                 { tags: { $in: product.tags || [] } }
             ]
-        }).limit(4);
+        }).limit(12);
 
-        res.json(similarProducts.map(transformProduct));
+        res.json(similarProducts.filter(hasPurchasableStock).slice(0, 4).map(transformProduct));
     } catch (err) {
         res.status(500).json({ message: err.message });
     }

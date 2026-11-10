@@ -14,6 +14,14 @@ const multer = require('multer');
 const upload = multer({ dest: 'uploads/' });
 const { uploadProducts } = require('../controllers/uploadController');
 
+// El catalogo no debe quedar en la cache del navegador. Safari en iOS
+// reutilizaba la lista durante horas y seguia mostrando productos que ya
+// estaban en stock 0 aunque el servidor ya los filtrara.
+router.use((req, res, next) => {
+    if (req.method === 'GET') res.set('Cache-Control', 'no-store');
+    next();
+});
+
 router.get('/', getProducts);
 router.get('/:id', getProductById);
 router.get('/:id/similar', require('../controllers/productController').getSimilarProducts);

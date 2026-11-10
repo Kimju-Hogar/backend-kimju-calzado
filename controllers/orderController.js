@@ -1,4 +1,5 @@
 const Order = require('../models/Order');
+const Product = require('../models/Product');
 const { sendTrackingEmail } = require('../utils/emailService');
 const { markOrderAsPaid } = require('../utils/orderFulfillment');
 const { normalizePaymentMethod, PAYMENT_METHODS, applySurcharge } = require('../config/payments');
@@ -33,6 +34,53 @@ exports.addOrderItems = async (req, res) => {
 
         if (!orderItems || orderItems.length === 0) {
             return res.status(400).json({ message: 'La orden no tiene productos' });
+        }
+
+        // Stock real antes de crear la orden. El carrito vive en el telefono del
+        // cliente (a veces desde hace dias) y puede traer productos que ya se
+        // agotaron; sin esta comprobacion la orden se creaba igual y, al
+        // confirmar el pago, el stock se recortaba a 0 habiendo vendido de mas.
+        const agotados = [];
+        for (const item of orderItems) {
+            const product = await Product.findById(item.product).select('name stock sizes colors status');
+            const pedido = Number(item.quantity) || 0;
+            let disponible = 0;
+
+            if (product && product.status !== 'inactive') {
+                const variacion = item.selectedVariation;
+                const talla = variacion
+                    ? (product.sizes || []).find((s) => String(s.size) === String(variacion))
+                    : null;
+                const color = variacion
+                    ? (product.colors || []).find((c) => String(c.color) === String(variacion))
+                    : null;
+
+                if (talla) disponible = Number(talla.stock) || 0;
+                else if (color) disponible = Number(color.stock) || 0;
+                else disponible = Number(product.stock) || 0;
+            }
+
+            if (pedido < 1 || disponible < pedido) {
+                agotados.push({
+                    product: item.product,
+                    name: product?.name || item.name,
+                    selectedVariation: item.selectedVariation || null,
+                    available: Math.max(0, disponible),
+                });
+            }
+        }
+
+        if (agotados.length > 0) {
+            const detalle = agotados
+                .map((a) =>
+                    `${a.name}${a.selectedVariation ? ` (${a.selectedVariation})` : ''}` +
+                    `${a.available > 0 ? `: quedan ${a.available}` : ': agotado'}`
+                )
+                .join(', ');
+            return res.status(409).json({
+                message: `Sin stock suficiente para: ${detalle}.`,
+                unavailable: agotados,
+            });
         }
 
         // El medio de pago se valida contra el catalogo. Antes el checkout
